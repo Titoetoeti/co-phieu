@@ -12,7 +12,7 @@ import warnings
 # 1. CẤU HÌNH & CSS (PIXEL TRADER FINAL)
 # ==============================================================================
 warnings.filterwarnings("ignore")
-st.set_page_config(page_title="PIXEL TRADER PRO", layout="wide", page_icon="📈")
+st.set_page_config(page_title="HỆ THỐNG DỰ BÁO MÃ CỔ PHIẾU", layout="wide", page_icon="📈")
 plt.style.use('dark_background')
 
 st.markdown("""
@@ -285,3 +285,4 @@ else:
             [ WAITING FOR USER INPUT ]
         </div>
     """, unsafe_allow_html=True)
+
