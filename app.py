@@ -9,13 +9,13 @@ from scipy.optimize import minimize
 import warnings
 
 # ==============================================================================
-# 1. CẤU HÌNH & CSS (FIX INPUT COLOR & LAYOUT)
+# 1. CẤU HÌNH & CSS (V2.3: XANH NEON + INPUT TRẮNG)
 # ==============================================================================
 warnings.filterwarnings("ignore")
 st.set_page_config(page_title="PIXEL TRADER PRO", layout="wide", page_icon="📈")
 plt.style.use('dark_background')
 
-# Reset VS Mode khi reload trang
+# Reset VS Mode khi reload
 if 'vs_mode' not in st.session_state:
     st.session_state.vs_mode = False
 
@@ -23,38 +23,55 @@ st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
 
-        /* 1. ẨN MENU THỪA */
+        /* 1. ẨN MENU */
         header[data-testid="stHeader"] { visibility: hidden; }
         .block-container { padding-top: 2rem; }
 
-        /* 2. NỀN CHÍNH */
+        /* 2. NỀN CHÍNH & MÀU CHỮ CHỦ ĐẠO (XANH NEON) */
         .stApp {
             background-color: #0d0d0d;
-            color: #00ff41;
+            color: #00ff41; /* Quay về màu xanh cũ */
             font-family: 'VT323', monospace;
             font-size: 20px;
         }
 
-        /* 3. INPUT TEXT COLOR (FIX LỖI CHỮ TỐI) */
-        /* Buộc chữ bên trong ô input phải là màu TRẮNG SÁNG */
+        /* 3. TÙY CHỈNH Ô NHẬP LIỆU (INPUT & SELECT) */
+        /* Quy tắc: Viền XANH, Nền ĐEN, Chữ TRẮNG */
+        
+        /* A. Ô nhập chữ (Player 1, Rivals) */
         input {
-            color: #ffffff !important; 
+            color: #ffffff !important; /* Chữ khi gõ là màu TRẮNG */
             font-family: 'VT323', monospace !important;
-            font-size: 20px !important;
+            font-size: 22px !important;
         }
         
-        div[data-baseweb="input"] > div, div[data-baseweb="select"] > div {
+        /* B. Ô chọn (Timeframe, Weapon) */
+        div[data-baseweb="select"] > div {
             background-color: #000 !important;
-            border: 2px solid #00ff41 !important; 
+            color: #ffffff !important; /* Chữ đã chọn là màu TRẮNG */
+            border-color: #00ff41 !important; /* Viền vẫn XANH */
+        }
+        
+        /* C. Viền chung cho các ô input */
+        div[data-baseweb="input"] > div {
+            background-color: #000 !important;
+            border: 2px solid #00ff41 !important; /* Viền XANH */
             border-radius: 0px;
         }
+        
+        /* D. Icon mũi tên trong ô select cũng phải trắng cho đồng bộ */
+        div[data-baseweb="select"] svg {
+            fill: #00ff41 !important;
+        }
 
-        /* 4. TEXT STYLES */
+        /* 4. NHÃN (LABEL) - GIỮ NGUYÊN MÀU XANH CŨ */
         label p {
             font-size: 18px !important;
             font-family: 'Press Start 2P', cursive !important;
-            color: #00ff41 !important;
+            color: #00ff41 !important; /* Nhãn vẫn XANH */
         }
+        
+        /* 5. TIÊU ĐỀ */
         h1 {
             font-family: 'Press Start 2P', cursive;
             text-align: center;
@@ -62,10 +79,10 @@ st.markdown("""
             text-shadow: 4px 4px 0px #003300;
         }
         .sub-title {
-            text-align: center; font-family: 'VT323'; font-size: 24px; color: #777; letter-spacing: 4px; margin-bottom: 30px;
+            text-align: center; font-family: 'VT323'; font-size: 24px; color: #555; letter-spacing: 4px; margin-bottom: 30px;
         }
 
-        /* 5. NÚT BẤM CHÍNH (Xanh) */
+        /* 6. NÚT BẤM */
         .main-btn button {
             width: 100%;
             background-color: #000;
@@ -79,23 +96,19 @@ st.markdown("""
             background-color: #00ff41; color: #000; box-shadow: 0 0 15px #00ff41;
         }
 
-        /* 6. NÚT VS MODE (Đơn giản, tinh tế) */
         .vs-btn button {
             width: 100%;
-            background-color: #111; /* Đen nhạt hơn nền xíu */
-            color: #aaa; /* Chữ xám */
-            border: 2px solid #555; /* Viền xám */
+            background-color: #111;
+            color: #aaa;
+            border: 2px solid #555;
             font-family: 'Press Start 2P', cursive;
-            font-size: 12px; /* Chữ nhỏ gọn */
+            font-size: 12px;
             padding: 10px;
         }
         .vs-btn button:hover {
-            color: #fff;
-            border-color: #fff;
-            background-color: #222;
+            color: #fff; border-color: #fff; background-color: #222;
         }
         
-        /* 7. NÚT FIGHT (Màu Cam Chiến Đấu) */
         .fight-btn button {
             width: 100%;
             background-color: #000;
@@ -137,7 +150,6 @@ def find_optimal_params(train_data, model_type, seasonal_periods=None):
     return res.x
 
 def get_forecast(data, model_type, test_size, window_size, seasonal_p):
-    # Hàm dự báo dùng chung để đảm bảo logic thống nhất
     train, test = data.iloc[:-test_size], data.iloc[-test_size:]
     preds = pd.Series(index=test.index, dtype='float64')
     info = ""
@@ -161,11 +173,9 @@ def get_forecast(data, model_type, test_size, window_size, seasonal_p):
     return test, preds, info
 
 def clean_yfinance_data(df):
-    # Hàm làm sạch dữ liệu Yahoo để tránh lỗi MultiIndex
     if df.empty: return None
     if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
     df.columns = [str(c).lower().strip() for c in df.columns]
-    # Ưu tiên lấy Adj Close -> Close -> Cột đầu tiên
     col = next((c for c in ['adj close', 'close', 'price'] if c in df.columns), df.columns[0])
     return df[col]
 
@@ -174,18 +184,21 @@ def clean_yfinance_data(df):
 # ==============================================================================
 
 st.markdown("<h1>⚡ PIXEL TRADER ⚡</h1>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>PRO EDITION [v2.2]</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>PRO EDITION [v2.3]</div>", unsafe_allow_html=True)
 
 # --- CONTROL PANEL ---
 with st.container():
     c1, c2, c3 = st.columns([1, 3, 1]) 
     with c2:
+        # Player 1 Input
         ticker = st.text_input("PLAYER 1 (MÃ CHÍNH)", value="META", placeholder="EX: AAPL").upper()
         
         col_inp1, col_inp2 = st.columns(2)
         with col_inp1:
+            # Timeframe Input
             freq_display = st.selectbox("TIMEFRAME", ("DAILY", "MONTHLY", "QUARTERLY"))
         with col_inp2:
+            # Weapon Input
             model_display = st.selectbox("WEAPON (MODEL)", ("Naive", "Moving Average", "SES", "Holt", "Holt-Winters"))
         
         with st.expander("⚙️ ADVANCED SETTINGS"):
@@ -195,7 +208,6 @@ with st.container():
             test_size = st.slider("BACKTEST SIZE", 4, 60, 12)
         
         st.write("") 
-        # Nút Run chính
         st.markdown('<div class="main-btn">', unsafe_allow_html=True)
         btn_run = st.button(">> START PREDICTION <<")
         st.markdown('</div>', unsafe_allow_html=True)
@@ -209,7 +221,7 @@ freq_map = {"DAILY": "D", "MONTHLY": "M", "QUARTERLY": "Q"}
 freq_val = freq_map[freq_display]
 
 if btn_run:
-    st.session_state.vs_mode = False # Reset
+    st.session_state.vs_mode = False 
 
 if btn_run or st.session_state.get('run_success', False):
     st.session_state.run_success = True
@@ -239,7 +251,7 @@ if btn_run or st.session_state.get('run_success', False):
             rmse = np.sqrt(mean_squared_error(test[mask], preds[mask])) if mask.sum() > 0 else 0
             mape = mean_absolute_percentage_error(test[mask], preds[mask]) * 100 if mask.sum() > 0 else 0
 
-            # KẾT QUẢ CHÍNH
+            # KẾT QUẢ
             st.markdown(f"<div style='text-align:center; font-family:\"Press Start 2P\"; color:#00ff41; margin-bottom:10px'>TARGET: {ticker}</div>", unsafe_allow_html=True)
             
             c_m1, c_m2, c_m3 = st.columns(3)
@@ -260,24 +272,24 @@ if btn_run or st.session_state.get('run_success', False):
             for s in ax.spines.values(): s.set_edgecolor('#333')
             st.pyplot(fig)
 
-            # --- NÚT ACTIVATE VS MODE (Căn giữa tinh tế) ---
+            # --- NÚT ACTIVATE VS MODE ---
             st.write("")
             st.write("")
-            c_btn1, c_btn2, c_btn3 = st.columns([2, 2, 2]) # Căn giữa chuẩn hơn
+            c_btn1, c_btn2, c_btn3 = st.columns([2, 2, 2])
             with c_btn2:
                 st.markdown('<div class="vs-btn">', unsafe_allow_html=True)
                 if st.button("⚔️ COMPARE WITH OTHERS"):
                     st.session_state.vs_mode = True
                 st.markdown('</div>', unsafe_allow_html=True)
 
-            # --- GIAO DIỆN VS MODE (Cân đối lại) ---
+            # --- VS MODE ---
             if st.session_state.vs_mode:
                 st.markdown("---")
                 st.markdown("<h3 style='text-align:center; color:#ffcc00; font-family:\"Press Start 2P\"'>VS MODE ACTIVATED</h3>", unsafe_allow_html=True)
                 
-                # BỐ CỤC CÂN ĐỐI [1, 2, 1]
                 v1, v2, v3 = st.columns([1, 2, 1])
                 with v2:
+                    # Rivals Input
                     rivals_input = st.text_input("ENTER RIVALS (MÃ ĐỐI THỦ)", value="AAPL, MSFT, GOOG", placeholder="EX: TSLA, AMZN")
                     
                     st.write("")
@@ -288,47 +300,33 @@ if btn_run or st.session_state.get('run_success', False):
                 if btn_fight:
                     rivals = [r.strip().upper() for r in rivals_input.split(",") if r.strip()]
                     all_tickers = [ticker] + rivals[:4] 
-                    
-                    # Dictionary lưu kết quả
                     results_map = {}
-                    
-                    # Progress bar
                     progress_bar = st.progress(0)
                     
                     for i, t in enumerate(all_tickers):
                         try:
-                            # Tải từng mã (Fix lỗi silent fail)
-                            d_t = yf.download(t, period="2y", progress=False) # Lấy 2 năm thôi cho nhanh
+                            d_t = yf.download(t, period="2y", progress=False)
                             val = clean_yfinance_data(d_t)
                             
                             if val is not None:
                                 val = val.astype(float)
                                 if val.index.tz is not None: val.index = val.index.tz_localize(None)
                                 
-                                # Resample
                                 if freq_val == "M": val = val.resample('M').last()
                                 elif freq_val == "Q": val = val.resample('Q').last()
                                 else: val = val.asfreq('B').fillna(method='ffill')
                                 val = val.dropna()
                                 
-                                # Dự báo
                                 _, pred_t, _ = get_forecast(val, model_display, test_size, window_size, seasonal_p)
-                                
-                                # Chỉ lưu nếu dự báo thành công (không toàn NaN)
-                                if not pred_t.isna().all():
-                                    results_map[t] = pred_t
+                                if not pred_t.isna().all(): results_map[t] = pred_t
                             
-                        except Exception as e:
-                            st.error(f"⚠️ Error with {t}: {e}") # Báo lỗi nếu có mã sai
-                            
+                        except: pass
                         progress_bar.progress((i + 1) / len(all_tickers))
                     
                     progress_bar.empty()
 
-                    # --- VẼ BIỂU ĐỒ SO SÁNH (FIX LỖI KHÔNG HIỆN) ---
                     if len(results_map) > 0:
                         st.markdown("<h4 style='text-align:center; font-family:VT323; margin-top:20px'>PREDICTED GROWTH (%) COMPARISON</h4>", unsafe_allow_html=True)
-                        
                         fig2, ax2 = plt.subplots(figsize=(14, 7), facecolor='black')
                         ax2.set_facecolor('#050505')
                         
@@ -336,15 +334,12 @@ if btn_run or st.session_state.get('run_success', False):
                         
                         for idx, (t_name, pred_series) in enumerate(results_map.items()):
                             if len(pred_series) > 0:
-                                # Chuẩn hóa về % để so sánh công bằng
                                 start_val = pred_series.iloc[0]
                                 if start_val != 0:
                                     pct_change = ((pred_series - start_val) / start_val) * 100
-                                    
                                     lw = 3 if t_name == ticker else 2
                                     ls = '-' if t_name == ticker else '--'
                                     color = colors[idx % len(colors)]
-                                    
                                     ax2.plot(pred_series.index, pct_change, label=f"{t_name}", color=color, linewidth=lw, linestyle=ls)
 
                         ax2.set_ylabel("GROWTH %")
@@ -352,11 +347,9 @@ if btn_run or st.session_state.get('run_success', False):
                         ax2.grid(color='#222', linestyle=':')
                         ax2.axhline(0, color='#555', linewidth=1)
                         for s in ax2.spines.values(): s.set_edgecolor('#333')
-                        
                         st.pyplot(fig2)
-                        st.info("🏆 TIP: The highest line represents the best predicted growth trend.")
                     else:
-                        st.warning("No valid data found for comparison. Please check ticker symbols.")
+                        st.warning("No valid data found for comparison.")
 
     except Exception as e:
         st.error(f"SYSTEM ERROR: {e}")
