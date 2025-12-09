@@ -68,7 +68,7 @@ st.markdown("""
 
         /* 2. NỀN CHÍNH & MÀU CHỮ */
         .stApp {
-            background-color: transparent;
+            background-color: #0d0d0d;
             color: #00ff41;
             font-family: 'VT323', monospace;
             font-size: 20px;
@@ -331,6 +331,7 @@ else:
         </div>
         <style>@keyframes blinker { 50% { opacity: 0; } }</style>
     """, unsafe_allow_html=True)
+
 
 
 
