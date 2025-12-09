@@ -9,7 +9,7 @@ from scipy.optimize import minimize
 import warnings
 
 # ==============================================================================
-# 1. CẤU HÌNH & CSS (FINAL VERSION: BIG TITLE & PIXEL METRICS)
+# 1. CẤU HÌNH & CSS (V2.6: DIỆT NÚT TRẮNG)
 # ==============================================================================
 warnings.filterwarnings("ignore")
 st.set_page_config(page_title="PIXEL TRADER PRO", layout="wide", page_icon="📈")
@@ -31,7 +31,7 @@ st.markdown("""
             font-size: 20px;
         }
 
-        /* 3. INPUTS (CHỮ TRẮNG) */
+        /* 3. INPUTS (GIỮ NGUYÊN) */
         input {
             color: #ffffff !important; 
             font-family: 'VT323', monospace !important;
@@ -49,52 +49,55 @@ st.markdown("""
         }
         div[data-baseweb="select"] svg { fill: #00ff41 !important; }
 
-        /* 4. NHÃN */
+        /* 4. NHÃN & TIÊU ĐỀ */
         label p {
             font-size: 18px !important;
             font-family: 'Press Start 2P', cursive !important;
             color: #00ff41 !important;
         }
-
-        /* 5. TIÊU ĐỀ CHÍNH (ĐÃ SỬA: TO NHẤT CÓ THỂ) */
         h1 {
-            font-family: 'Press Start 2P', cursive !important;
+            font-family: 'Press Start 2P', cursive;
             text-align: center;
             color: #00ff41;
-            text-shadow: 6px 6px 0px #003300; /* Bóng đổ dày hơn */
-            font-size: 70px !important; /* Kích thước KHỔNG LỒ */
-            line-height: 1.2 !important;
-            margin-bottom: 10px !important;
-            margin-top: 0px !important;
+            text-shadow: 4px 4px 0px #003300;
         }
         .sub-title {
             text-align: center; font-family: 'VT323'; font-size: 24px; color: #555; letter-spacing: 4px; margin-bottom: 30px;
         }
 
-        /* 6. NÚT BẤM (GIỮ NGUYÊN NỀN ĐEN CHỮ XANH) */
-        .main-btn button, .fight-btn button {
+        /* 5. CƯỠNG CHẾ TOÀN BỘ NÚT BẤM (FIX LỖI MÀU TRẮNG) */
+        /* Tôi dùng !important để ép mọi nút bấm phải đen */
+        div.stButton > button {
             width: 100%;
-            background-color: #000 !important;
-            color: #00ff41 !important;
-            border: 3px solid #00ff41 !important;
+            background-color: #000000 !important; /* Nền ĐEN tuyệt đối */
+            color: #00ff41 !important; /* Chữ XANH */
+            border: 2px solid #00ff41 !important; /* Viền XANH */
             font-family: 'Press Start 2P', cursive !important;
             padding: 15px;
-            margin-top: 10px;
-            transition: 0.2s;
+            margin-top: 15px;
+            border-radius: 0px !important; /* Vuông vức */
+            transition: all 0.2s ease-in-out;
             box-shadow: none !important;
-            transform: none !important;
         }
-        .main-btn button:hover, .fight-btn button:hover {
-            background-color: #000 !important; 
-            color: #00ff41 !important;
-            box-shadow: 0 0 20px #00ff41 !important; /* Glow effect */
+
+        /* Hiệu ứng di chuột vào */
+        div.stButton > button:hover {
+            background-color: #00ff41 !important; /* Đổi nền thành XANH */
+            color: #000000 !important; /* Chữ thành ĐEN */
+            border-color: #00ff41 !important;
+            box-shadow: 0 0 15px #00ff41 !important; /* Phát sáng */
+        }
+        
+        /* Hiệu ứng khi bấm */
+        div.stButton > button:active {
+            transform: scale(0.98);
         }
 
     </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. LOGIC TÍNH TOÁN
+# 2. LOGIC TÍNH TOÁN (GIỮ NGUYÊN)
 # ==============================================================================
 def find_optimal_params(train_data, model_type, seasonal_periods=None):
     bounds_limit = (0.01, 0.99)
@@ -150,9 +153,8 @@ def clean_yfinance_data(df):
 # 3. GIAO DIỆN CHÍNH
 # ==============================================================================
 
-# TIÊU ĐỀ KHỔNG LỒ
-st.markdown("<h1>PIXEL TRADER</h1>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>PRO EDITION [FINAL]</div>", unsafe_allow_html=True)
+st.markdown("<h1>⚡ PIXEL TRADER ⚡</h1>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>PRO EDITION [v2.6]</div>", unsafe_allow_html=True)
 
 with st.container():
     c1, c2, c3 = st.columns([1, 3, 1]) 
@@ -167,14 +169,13 @@ with st.container():
             test_size = st.slider("BACKTEST SIZE", 4, 60, 12)
         
         st.write("") 
-        st.markdown('<div class="main-btn">', unsafe_allow_html=True)
+        # Nút Start Prediction
         btn_run = st.button(">> START PREDICTION <<")
-        st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("---")
 
 # ==============================================================================
-# 4. XỬ LÝ & HIỂN THỊ
+# 4. XỬ LÝ
 # ==============================================================================
 freq_map = {"DAILY": "D", "MONTHLY": "M", "QUARTERLY": "Q"}
 freq_val = freq_map[freq_display]
@@ -202,40 +203,13 @@ if btn_run or st.session_state.get('run_success', False):
             rmse = np.sqrt(mean_squared_error(test[mask], preds[mask])) if mask.sum() > 0 else 0
             mape = mean_absolute_percentage_error(test[mask], preds[mask]) * 100 if mask.sum() > 0 else 0
 
-            # --- HIỂN THỊ KẾT QUẢ (FONT PIXEL) ---
+            # KẾT QUẢ
             st.markdown(f"<div style='text-align:center; font-family:\"Press Start 2P\"; color:#00ff41; margin-bottom:10px'>TARGET: {ticker}</div>", unsafe_allow_html=True)
             c_m1, c_m2, c_m3 = st.columns(3)
-            
-            # Style cho các ô chỉ số:
-            # - Tên (RMSE): Font Press Start 2P
-            # - Số (Value): Font VT323 (To)
-            box_style = "border:2px solid #00ff41; padding:10px; text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;"
-            label_font = "font-family: 'Press Start 2P', cursive; font-size: 14px; margin-bottom: 5px; color: #00ff41;"
-            value_font = "font-family: 'VT323', monospace; font-size: 40px; margin: 0; line-height: 1; color: #ffffff;"
-
-            # RMSE
-            c_m1.markdown(f"""
-                <div style='{box_style}'>
-                    <div style='{label_font}'>RMSE</div>
-                    <div style='{value_font}'>{rmse:.2f}</div>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            # MAPE
-            c_m2.markdown(f"""
-                <div style='{box_style}'>
-                    <div style='{label_font}'>MAPE</div>
-                    <div style='{value_font}'>{mape:.2f}%</div>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            # PARAMS (Riêng cái này màu xanh cyan cho khác biệt xíu)
-            c_m3.markdown(f"""
-                <div style='border:2px solid #00ffff; padding:10px; text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;'>
-                    <div style='font-family: \"Press Start 2P\", cursive; font-size: 14px; margin-bottom: 5px; color: #00ffff;'>PARAMS</div>
-                    <div style='font-family: \"VT323\", monospace; font-size: 35px; margin: 0; line-height: 1; color: #ffffff;'>{info}</div>
-                </div>
-            """, unsafe_allow_html=True)
+            box_style = "border:2px solid #00ff41; padding:5px; text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;"
+            c_m1.markdown(f"<div style='{box_style}'><div style='font-size:12px; color:#00ff41'>RMSE</div><div style='font-size:28px; color:#fff'>{rmse:.2f}</div></div>", unsafe_allow_html=True)
+            c_m2.markdown(f"<div style='{box_style}'><div style='font-size:12px; color:#00ff41'>MAPE</div><div style='font-size:28px; color:#fff'>{mape:.2f}%</div></div>", unsafe_allow_html=True)
+            c_m3.markdown(f"<div style='border:2px solid #00ffff; padding:5px; text-align:center;'><div style='font-size:12px; color:#00ffff'>PARAMS</div><div style='font-size:24px; color:#fff'>{info}</div></div>", unsafe_allow_html=True)
 
             st.write("")
             fig, ax = plt.subplots(figsize=(14, 6), facecolor='black')
@@ -256,9 +230,8 @@ if btn_run or st.session_state.get('run_success', False):
             with v2:
                 rivals_input = st.text_input("ENTER RIVALS (MÃ ĐỐI THỦ)", value="AAPL, MSFT, GOOG", placeholder="EX: TSLA, AMZN")
                 st.write("")
-                st.markdown('<div class="fight-btn">', unsafe_allow_html=True)
+                # Nút Fight (CSS sẽ tự áp dụng style chung)
                 btn_fight = st.button(">> START COMPARISON <<")
-                st.markdown('</div>', unsafe_allow_html=True)
 
             if btn_fight:
                 rivals = [r.strip().upper() for r in rivals_input.split(",") if r.strip()]
