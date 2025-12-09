@@ -1,0 +1,8 @@
+flask
+pandas
+numpy
+scipy
+statsmodels
+yfinance
+scikit-learn
+gunicorn
