@@ -18,7 +18,7 @@ def get_base64_of_bin_file(bin_file):
 
 # Thay 'background.jpg' bằng tên file ảnh của bạn
 # Nếu ảnh là png thì đổi thành 'background.png'
-img_file = "T1 ALL.jpg" 
+img_file = "T1ALL.jpg" 
 
 try:
     bin_str = get_base64_of_bin_file(img_file)
@@ -331,4 +331,5 @@ else:
         </div>
         <style>@keyframes blinker { 50% { opacity: 0; } }</style>
     """, unsafe_allow_html=True)
+
 
