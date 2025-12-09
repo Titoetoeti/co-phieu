@@ -9,7 +9,7 @@ from scipy.optimize import minimize
 import warnings
 
 # ==============================================================================
-# 1. CẤU HÌNH & CSS (V2.5: SIMPLE PIXEL BUTTONS)
+# 1. CẤU HÌNH & CSS (V2.6: DIỆT NÚT TRẮNG)
 # ==============================================================================
 warnings.filterwarnings("ignore")
 st.set_page_config(page_title="PIXEL TRADER PRO", layout="wide", page_icon="📈")
@@ -49,7 +49,7 @@ st.markdown("""
         }
         div[data-baseweb="select"] svg { fill: #00ff41 !important; }
 
-        /* 4. NHÃN & TIÊU ĐỀ (GIỮ NGUYÊN) */
+        /* 4. NHÃN & TIÊU ĐỀ */
         label p {
             font-size: 18px !important;
             font-family: 'Press Start 2P', cursive !important;
@@ -65,26 +65,32 @@ st.markdown("""
             text-align: center; font-family: 'VT323'; font-size: 24px; color: #555; letter-spacing: 4px; margin-bottom: 30px;
         }
 
-        /* 5. NÚT BẤM (ĐÃ SỬA THEO YÊU CẦU) */
-        /* Nền đen, Chữ xanh, Viền xanh, Font pixel */
-        .main-btn button, .fight-btn button {
+        /* 5. CƯỠNG CHẾ TOÀN BỘ NÚT BẤM (FIX LỖI MÀU TRẮNG) */
+        /* Tôi dùng !important để ép mọi nút bấm phải đen */
+        div.stButton > button {
             width: 100%;
-            background-color: #000 !important; /* Luôn là nền đen */
-            color: #00ff41 !important; /* Luôn là chữ xanh */
-            border: 3px solid #00ff41 !important; /* Viền xanh rõ nét */
+            background-color: #000000 !important; /* Nền ĐEN tuyệt đối */
+            color: #00ff41 !important; /* Chữ XANH */
+            border: 2px solid #00ff41 !important; /* Viền XANH */
             font-family: 'Press Start 2P', cursive !important;
             padding: 15px;
-            margin-top: 10px;
-            transition: 0.2s;
-            box-shadow: none !important; /* Bỏ bóng khối */
-            transform: none !important; /* Bỏ hiệu ứng lún */
+            margin-top: 15px;
+            border-radius: 0px !important; /* Vuông vức */
+            transition: all 0.2s ease-in-out;
+            box-shadow: none !important;
         }
 
-        /* Hiệu ứng khi di chuột: Chỉ phát sáng nhẹ, không đổi màu nền */
-        .main-btn button:hover, .fight-btn button:hover {
-            background-color: #000 !important; 
-            color: #00ff41 !important;
-            box-shadow: 0 0 20px #00ff41 !important; /* Glow effect */
+        /* Hiệu ứng di chuột vào */
+        div.stButton > button:hover {
+            background-color: #00ff41 !important; /* Đổi nền thành XANH */
+            color: #000000 !important; /* Chữ thành ĐEN */
+            border-color: #00ff41 !important;
+            box-shadow: 0 0 15px #00ff41 !important; /* Phát sáng */
+        }
+        
+        /* Hiệu ứng khi bấm */
+        div.stButton > button:active {
+            transform: scale(0.98);
         }
 
     </style>
@@ -148,7 +154,7 @@ def clean_yfinance_data(df):
 # ==============================================================================
 
 st.markdown("<h1>⚡ PIXEL TRADER ⚡</h1>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>PRO EDITION [v2.5]</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>PRO EDITION [v2.6]</div>", unsafe_allow_html=True)
 
 with st.container():
     c1, c2, c3 = st.columns([1, 3, 1]) 
@@ -163,10 +169,8 @@ with st.container():
             test_size = st.slider("BACKTEST SIZE", 4, 60, 12)
         
         st.write("") 
-        # Nút Start Prediction (Giao diện mới)
-        st.markdown('<div class="main-btn">', unsafe_allow_html=True)
+        # Nút Start Prediction
         btn_run = st.button(">> START PREDICTION <<")
-        st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("---")
 
@@ -218,7 +222,7 @@ if btn_run or st.session_state.get('run_success', False):
             for s in ax.spines.values(): s.set_edgecolor('#333')
             st.pyplot(fig)
 
-            # --- VS MODE AUTO ---
+            # --- VS MODE ---
             st.markdown("---")
             st.markdown("<h3 style='text-align:center; color:#ffcc00; font-family:\"Press Start 2P\"'>VS MODE ACTIVATED</h3>", unsafe_allow_html=True)
             
@@ -226,10 +230,8 @@ if btn_run or st.session_state.get('run_success', False):
             with v2:
                 rivals_input = st.text_input("ENTER RIVALS (MÃ ĐỐI THỦ)", value="AAPL, MSFT, GOOG", placeholder="EX: TSLA, AMZN")
                 st.write("")
-                # Nút Start Comparison (Giao diện mới)
-                st.markdown('<div class="fight-btn">', unsafe_allow_html=True)
+                # Nút Fight (CSS sẽ tự áp dụng style chung)
                 btn_fight = st.button(">> START COMPARISON <<")
-                st.markdown('</div>', unsafe_allow_html=True)
 
             if btn_fight:
                 rivals = [r.strip().upper() for r in rivals_input.split(",") if r.strip()]
