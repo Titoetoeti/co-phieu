@@ -9,7 +9,7 @@ from scipy.optimize import minimize
 import warnings
 
 # ==============================================================================
-# 1. CẤU HÌNH & CSS (V2.4: ARCADE BUTTONS & AUTO VS MODE)
+# 1. CẤU HÌNH & CSS (V2.5: SIMPLE PIXEL BUTTONS)
 # ==============================================================================
 warnings.filterwarnings("ignore")
 st.set_page_config(page_title="PIXEL TRADER PRO", layout="wide", page_icon="📈")
@@ -31,7 +31,7 @@ st.markdown("""
             font-size: 20px;
         }
 
-        /* 3. INPUTS (GIỮ NGUYÊN V2.3) */
+        /* 3. INPUTS (GIỮ NGUYÊN) */
         input {
             color: #ffffff !important; 
             font-family: 'VT323', monospace !important;
@@ -49,7 +49,7 @@ st.markdown("""
         }
         div[data-baseweb="select"] svg { fill: #00ff41 !important; }
 
-        /* 4. NHÃN & TIÊU ĐỀ */
+        /* 4. NHÃN & TIÊU ĐỀ (GIỮ NGUYÊN) */
         label p {
             font-size: 18px !important;
             font-family: 'Press Start 2P', cursive !important;
@@ -65,28 +65,26 @@ st.markdown("""
             text-align: center; font-family: 'VT323'; font-size: 24px; color: #555; letter-spacing: 4px; margin-bottom: 30px;
         }
 
-        /* 5. NÚT BẤM MỚI (ARCADE STYLE) */
-        /* Áp dụng cho cả nút Start và nút Fight */
+        /* 5. NÚT BẤM (ĐÃ SỬA THEO YÊU CẦU) */
+        /* Nền đen, Chữ xanh, Viền xanh, Font pixel */
         .main-btn button, .fight-btn button {
             width: 100%;
-            background-color: #000;
-            color: #00ff41;
-            border: 2px solid #00ff41; /* Viền đơn cứng cáp */
-            font-family: 'Press Start 2P', cursive;
+            background-color: #000 !important; /* Luôn là nền đen */
+            color: #00ff41 !important; /* Luôn là chữ xanh */
+            border: 3px solid #00ff41 !important; /* Viền xanh rõ nét */
+            font-family: 'Press Start 2P', cursive !important;
             padding: 15px;
-            box-shadow: 4px 4px 0px #003300; /* Đổ bóng khối kiểu pixel */
-            transition: all 0.1s ease-in-out; /* Nhanh hơn cho cảm giác game */
             margin-top: 10px;
+            transition: 0.2s;
+            box-shadow: none !important; /* Bỏ bóng khối */
+            transform: none !important; /* Bỏ hiệu ứng lún */
         }
+
+        /* Hiệu ứng khi di chuột: Chỉ phát sáng nhẹ, không đổi màu nền */
         .main-btn button:hover, .fight-btn button:hover {
-            background-color: #00ff41;
-            color: #000;
-            box-shadow: 2px 2px 0px #003300; /* Nhấn xuống nhẹ */
-            transform: translate(2px, 2px); /* Hiệu ứng nhấn nút */
-        }
-        .main-btn button:active, .fight-btn button:active {
-             box-shadow: 0px 0px 0px #003300;
-             transform: translate(4px, 4px); /* Nhấn hẳn xuống */
+            background-color: #000 !important; 
+            color: #00ff41 !important;
+            box-shadow: 0 0 20px #00ff41 !important; /* Glow effect */
         }
 
     </style>
@@ -150,7 +148,7 @@ def clean_yfinance_data(df):
 # ==============================================================================
 
 st.markdown("<h1>⚡ PIXEL TRADER ⚡</h1>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>PRO EDITION [v2.4]</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>PRO EDITION [v2.5]</div>", unsafe_allow_html=True)
 
 with st.container():
     c1, c2, c3 = st.columns([1, 3, 1]) 
@@ -165,6 +163,7 @@ with st.container():
             test_size = st.slider("BACKTEST SIZE", 4, 60, 12)
         
         st.write("") 
+        # Nút Start Prediction (Giao diện mới)
         st.markdown('<div class="main-btn">', unsafe_allow_html=True)
         btn_run = st.button(">> START PREDICTION <<")
         st.markdown('</div>', unsafe_allow_html=True)
@@ -180,7 +179,6 @@ freq_val = freq_map[freq_display]
 if btn_run or st.session_state.get('run_success', False):
     st.session_state.run_success = True
     
-    # --- PHẦN 1: MÃ CHÍNH ---
     try:
         with st.spinner(f"LOADING DATA: {ticker}..."):
             df = yf.download(ticker, period="5y", progress=False)
@@ -220,7 +218,7 @@ if btn_run or st.session_state.get('run_success', False):
             for s in ax.spines.values(): s.set_edgecolor('#333')
             st.pyplot(fig)
 
-            # --- TỰ ĐỘNG HIỆN VS MODE (Không cần nút bấm nữa) ---
+            # --- VS MODE AUTO ---
             st.markdown("---")
             st.markdown("<h3 style='text-align:center; color:#ffcc00; font-family:\"Press Start 2P\"'>VS MODE ACTIVATED</h3>", unsafe_allow_html=True)
             
@@ -228,6 +226,7 @@ if btn_run or st.session_state.get('run_success', False):
             with v2:
                 rivals_input = st.text_input("ENTER RIVALS (MÃ ĐỐI THỦ)", value="AAPL, MSFT, GOOG", placeholder="EX: TSLA, AMZN")
                 st.write("")
+                # Nút Start Comparison (Giao diện mới)
                 st.markdown('<div class="fight-btn">', unsafe_allow_html=True)
                 btn_fight = st.button(">> START COMPARISON <<")
                 st.markdown('</div>', unsafe_allow_html=True)
