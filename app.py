@@ -9,318 +9,237 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolu
 from scipy.optimize import minimize
 import warnings
 
-# Tắt cảnh báo
+# ==============================================================================
+# 1. CẤU HÌNH & CSS (GIAO DIỆN HACKER)
+# ==============================================================================
 warnings.filterwarnings("ignore")
-st.set_page_config(page_title="Stock Forecast App", layout="wide")
+st.set_page_config(page_title="PRO TRADING SYSTEM", layout="wide", page_icon="⚡")
+
+# Thiết lập style cho biểu đồ Matplotlib sang Dark Mode
+plt.style.use('dark_background')
+
+# CSS TÙY CHỈNH MẠNH
+st.markdown("""
+    <style>
+        /* Import Font công nghệ */
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+        /* 1. NỀN TỔNG THỂ */
+        .stApp {
+            background-color: #050505;
+            color: #00ff41;
+            font-family: 'Share Tech Mono', monospace;
+        }
+
+        /* 2. SIDEBAR */
+        [data-testid="stSidebar"] {
+            background-color: #000000;
+            border-right: 1px solid #333;
+        }
+
+        /* 3. INPUTS & SELECTBOX */
+        div[data-baseweb="input"] > div, div[data-baseweb="select"] > div {
+            background-color: #0f0f0f !important;
+            color: #00ff41 !important;
+            border: 1px solid #333;
+            border-radius: 0px; /* Vuông vức */
+        }
+        
+        label, .stMarkdown, h1, h2, h3 {
+            color: #00ff41 !important;
+            font-family: 'Share Tech Mono', monospace !important;
+        }
+
+        /* 4. NÚT BẤM (BUTTON) */
+        div.stButton > button {
+            width: 100%;
+            background-color: #000;
+            color: #00ff41;
+            border: 1px solid #00ff41;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 18px;
+            text-transform: uppercase;
+            padding: 15px;
+            transition: 0.3s;
+        }
+        div.stButton > button:hover {
+            background-color: #00ff41;
+            color: #000;
+            box-shadow: 0 0 20px #00ff41;
+        }
+
+        /* 5. METRIC CARDS (HỘP KẾT QUẢ) */
+        div[data-testid="metric-container"] {
+            background-color: #111;
+            border: 1px solid #333;
+            padding: 10px;
+            border-left: 5px solid #00ff41;
+        }
+        
+        /* 6. BẢNG DỮ LIỆU */
+        div[data-testid="stDataFrame"] {
+            border: 1px solid #333;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
 # ==============================================================================
-# 1. MODULE TỐI ƯU HÓA THAM SỐ
+# 2. LOGIC TÍNH TOÁN (CORE ENGINE)
 # ==============================================================================
 def find_optimal_params(train_data, model_type, seasonal_periods=None):
     bounds_limit = (0.01, 0.99)
-    
     def loss_function(params):
         try:
             if model_type == 'SES':
                 model = SimpleExpSmoothing(train_data).fit(smoothing_level=params[0], optimized=False)
             elif model_type == 'Holt':
-                model = ExponentialSmoothing(train_data, trend='add', seasonal=None, damped_trend=False).fit(
+                model = ExponentialSmoothing(train_data, trend='add').fit(
                     smoothing_level=params[0], smoothing_trend=params[1], optimized=False)
-            elif model_type == 'Holt-Winters':
+            elif model_type == 'HW':
                 model = ExponentialSmoothing(train_data, trend='add', seasonal='add', seasonal_periods=seasonal_periods).fit(
                     smoothing_level=params[0], smoothing_trend=params[1], smoothing_seasonal=params[2], optimized=False)
-            
             return np.sqrt(mean_squared_error(train_data, model.fittedvalues))
-        except:
-            return 1e10
+        except: return 1e10
 
-    if model_type == 'SES':
-        initial_guess = [0.5]
-        bounds = [bounds_limit]
-    elif model_type == 'Holt':
-        initial_guess = [0.5, 0.1]
-        bounds = [bounds_limit, bounds_limit]
-    elif model_type == 'Holt-Winters':
-        initial_guess = [0.5, 0.1, 0.1]
-        bounds = [bounds_limit, bounds_limit, bounds_limit]
-    else:
-        return []
+    if model_type == 'SES': init, bnds = [0.5], [bounds_limit]
+    elif model_type == 'Holt': init, bnds = [0.5, 0.1], [bounds_limit]*2
+    elif model_type == 'HW': init, bnds = [0.5, 0.1, 0.1], [bounds_limit]*3
+    else: return []
 
-    result = minimize(loss_function, initial_guess, bounds=bounds, method='L-BFGS-B')
-    return result.x
+    res = minimize(loss_function, init, bounds=bnds, method='L-BFGS-B')
+    return res.x
 
 # ==============================================================================
-# 2. GIAO DIỆN VÀ XỬ LÝ CHÍNH
+# 3. SIDEBAR (GIAO DIỆN ĐIỀU KHIỂN)
 # ==============================================================================
+st.sidebar.markdown('<h1>⚡ SYSTEM CONTROL</h1>', unsafe_allow_html=True)
 
-st.title("Dự Báo Giá Cổ Phiếu")
-st.markdown("---")
+ticker = st.sidebar.text_input("ASSET SYMBOL", value="META").upper()
 
-import streamlit as st
-import yfinance as yf
-
-# ==============================================================================
-# 1. SETUP GIAO DIỆN DARK MODE & TECH STYLE (CSS)
-# ==============================================================================
-# Lưu ý: Đặt dòng này ngay đầu file app.py, sau các lệnh import
-st.markdown("""
-    <style>
-        /* 1. Nền tổng thể và Sidebar màu đen sâu */
-        .stApp {
-            background-color: #0e1117; /* Màu nền chính tối */
-        }
-        [data-testid="stSidebar"] {
-            background-color: #000000; /* Sidebar đen tuyền */
-            border-right: 1px solid #222222; /* Viền mỏng tinh tế */
-        }
-
-        /* 2. Tùy chỉnh Tiêu đề Sidebar */
-        .sidebar-title {
-            color: #ffffff;
-            font-family: 'Courier New', monospace; /* Font kiểu code */
-            font-size: 24px;
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            margin-bottom: 20px;
-            border-bottom: 2px solid #00ff41; /* Gạch chân xanh neon */
-            padding-bottom: 10px;
-        }
-
-        /* 3. Tùy chỉnh Input và Selectbox */
-        div[data-baseweb="input"] > div {
-            background-color: #111111 !important;
-            color: #00ff41 !important; /* Chữ xanh neon khi gõ */
-            border: 1px solid #333333;
-            border-radius: 4px;
-        }
-        div[data-baseweb="select"] > div {
-            background-color: #111111 !important;
-            color: white !important;
-            border: 1px solid #333333;
-            border-radius: 4px;
-        }
-        label {
-            color: #aaaaaa !important; /* Màu nhãn xám nhạt hiện đại */
-            font-size: 12px !important;
-            text-transform: uppercase;
-            font-weight: 600;
-        }
-
-        /* 4. Nút bấm phong cách Cyberpunk */
-        div.stButton > button {
-            width: 100%;
-            background: linear-gradient(90deg, #000000, #1a1a1a);
-            color: #00ff41; /* Chữ xanh neon */
-            border: 1px solid #00ff41;
-            padding: 12px 24px;
-            border-radius: 4px;
-            font-family: 'Courier New', monospace;
-            font-weight: bold;
-            transition: all 0.3s ease;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        div.stButton > button:hover {
-            background-color: #00ff41;
-            color: #000000;
-            box-shadow: 0 0 15px rgba(0, 255, 65, 0.5); /* Hiệu ứng phát sáng */
-            border-color: #00ff41;
-        }
-        
-        /* 5. Slider */
-        div[data-baseweb="slider"] div {
-            background-color: #00ff41 !important; /* Thanh trượt xanh */
-        }
-
-    </style>
-""", unsafe_allow_html=True)
-
-# ==============================================================================
-# 2. CODE SIDEBAR ĐÃ TỐI GIẢN
-# ==============================================================================
-
-# Tạo tiêu đề thủ công bằng HTML để đẹp hơn st.header
-st.sidebar.markdown('<div class="sidebar-title">⚡ STOCK.AI</div>', unsafe_allow_html=True)
-
-# Nhập liệu (Dùng placeholder để gọn gàng hơn)
-ticker = st.sidebar.text_input(
-    "Mã tài sản (Symbol)", 
-    value="META", 
-    placeholder="VD: AAPL, BTC-USD..."
-).upper()
-
-st.sidebar.markdown("---") # Đường kẻ phân cách mờ
-
-# Nhóm các cấu hình vào 2 cột nhỏ hoặc để trơn cho thoáng
 col1, col2 = st.sidebar.columns(2)
 with col1:
-    freq_option = st.selectbox("Khung thời gian", ("Ngày", "Tháng", "Quý"))
-
+    freq_display = st.selectbox("TIMEFRAME", ("DAILY", "MONTHLY", "QUARTERLY"))
 with col2:
-    # Logic mapping đơn giản để code gọn hơn
-    model_map = {
-        "Naive": "Naive", 
-        "Moving Average": "MA", 
-        "Simple Exponential Smoothing": "SES", 
-        "Holt's Linear": "Holt", 
-        "Holt-Winters": "HW"
-    }
-    # Hiển thị tên đầy đủ, nhưng lấy giá trị viết tắt để xử lý logic
-    model_display = st.selectbox("Thuật toán", list(model_map.keys()))
-    model_option = model_display # Giữ nguyên biến cũ để không hỏng code dưới
+    model_display = st.selectbox("ALGORITHM", ("Naive", "Moving Average", "SES", "Holt", "Holt-Winters"))
 
-# Cấu hình nâng cao (Ẩn bớt để tối giản, chỉ hiện khi cần)
-with st.sidebar.expander("⚙️ Cấu hình nâng cao", expanded=True):
-    window_size = 0
-    if model_option == "Moving Average":
-        window_size = st.slider("Cửa sổ trượt (Window)", 2, 50, 3)
+# Mapping lại giá trị cho logic
+freq_map = {"DAILY": "D", "MONTHLY": "M", "QUARTERLY": "Q"}
+freq_val = freq_map[freq_display]
+
+# Cấu hình nâng cao
+with st.sidebar.expander("⚙️ ADVANCED SETTINGS", expanded=True):
+    window_size = 3
+    if model_display == "Moving Average":
+        window_size = st.slider("WINDOW SIZE", 2, 50, 3)
+    test_size = st.slider("TEST SIZE", 4, 60, 12)
+
+btn_run = st.sidebar.button("INITIALIZE PREDICTION")
+
+# ==============================================================================
+# 4. MÀN HÌNH CHÍNH (MAIN SCREEN)
+# ==============================================================================
+if btn_run:
+    st.markdown(f"<h2>>> ANALYZING TARGET: {ticker}</h2>", unsafe_allow_html=True)
     
-    test_size = st.slider("Backtest Size (Kỳ)", 4, 60, 12)
-
-st.sidebar.markdown("<br>", unsafe_allow_html=True) # Khoảng trắng
-
-# Nút bấm (Đã được CSS biến thành nút Cyberpunk)
-if st.sidebar.button("KHỞI CHẠY PHÂN TÍCH"):
-    
-    with st.spinner('SYSTEM PROCESSING...'):
+    with st.spinner('ACCESSING DATA FEED...'):
         try:
-            # Code tải dữ liệu giữ nguyên
+            # Tải dữ liệu
             df = yf.download(ticker, period="5y", progress=False)
-            
             if df.empty:
-                st.error("❌ DATA NOT FOUND.")
+                st.error("❌ ERROR: DATA NOT FOUND.")
                 st.stop()
             
-            # ... (Phần xử lý tiếp theo của bạn giữ nguyên) ...
+            # Fix lỗi cấu trúc Yahoo Finance
+            if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
+            df.columns = [str(c).lower().strip() for c in df.columns]
             
+            # Chọn cột giá
+            col = 'adj close' if 'adj close' in df.columns else ('close' if 'close' in df.columns else df.columns[0])
+            data = df[col].astype(float)
+            if data.index.tz is not None: data.index = data.index.tz_localize(None)
+            
+            # Xử lý thời gian
+            if freq_val == "M": 
+                data = data.resample('M').last(); seasonal_p = 12
+            elif freq_val == "Q": 
+                data = data.resample('Q').last(); seasonal_p = 4
+            else: 
+                data = data.asfreq('B').fillna(method='ffill'); seasonal_p = 5
+
+            data = data.dropna()
+            
+            if len(data) < test_size + 10:
+                st.error("⚠️ DATA INSUFFICIENT FOR ANALYSIS.")
+                st.stop()
+
+            # Train/Test Split
+            train, test = data.iloc[:-test_size], data.iloc[-test_size:]
+            
+            # Chạy mô hình
+            preds = pd.Series(index=test.index, dtype='float64')
+            info = ""
+            
+            if model_display == "Naive":
+                preds[:] = np.array([train.iloc[-1]] * len(test))
+            elif model_display == "Moving Average":
+                preds = data.rolling(window_size).mean().shift(1).loc[test.index]
+            elif model_display == "SES":
+                p = find_optimal_params(train, 'SES')
+                preds = SimpleExpSmoothing(train).fit(smoothing_level=p[0], optimized=False).forecast(len(test))
+                info = f"α={p[0]:.2f}"
+            elif model_display == "Holt":
+                p = find_optimal_params(train, 'Holt')
+                preds = ExponentialSmoothing(train, trend='add').fit(smoothing_level=p[0], smoothing_trend=p[1], optimized=False).forecast(len(test))
+                info = f"α={p[0]:.2f}, β={p[1]:.2f}"
+            elif model_display == "Holt-Winters":
+                p = find_optimal_params(train, 'HW', seasonal_p)
+                preds = ExponentialSmoothing(train, trend='add', seasonal='add', seasonal_periods=seasonal_p).fit(
+                    smoothing_level=p[0], smoothing_trend=p[1], smoothing_seasonal=p[2], optimized=False).forecast(len(test))
+                info = f"α={p[0]:.2f}, β={p[1]:.2f}, γ={p[2]:.2f}"
+
+            # Hiển thị Metrics
+            mask = ~np.isnan(preds) & ~np.isnan(test)
+            if mask.sum() > 0:
+                rmse = np.sqrt(mean_squared_error(test[mask], preds[mask]))
+                mape = mean_absolute_percentage_error(test[mask], preds[mask]) * 100
+                
+                m1, m2, m3 = st.columns(3)
+                m1.metric("RMSE ERROR", f"{rmse:.2f}")
+                m2.metric("ACCURACY GAP (MAPE)", f"{mape:.2f}%")
+                m3.info(f"PARAMS: {info}")
+
+            # VẼ BIỂU ĐỒ CYBERPUNK
+            fig, ax = plt.subplots(figsize=(14, 6), facecolor='black')
+            ax.set_facecolor('black')
+            
+            # Vẽ dữ liệu
+            ax.plot(train.index[-100:], train.iloc[-100:], color='#333333', label='TRAINING DATA')
+            ax.plot(test.index, test, color='#00ff41', linewidth=2, label='ACTUAL SIGNAL')
+            ax.plot(test.index, preds, color='#ff00ff', linestyle='--', linewidth=2, marker='o', label=f'PREDICTION ({model_display})')
+            
+            # Trang trí biểu đồ
+            ax.grid(color='#222222', linestyle=':', linewidth=0.5)
+            ax.tick_params(colors='#00ff41')
+            for spine in ax.spines.values(): spine.set_edgecolor('#333333')
+            
+            ax.legend(facecolor='black', edgecolor='#333333', labelcolor='#00ff41')
+            ax.set_title(f"SIGNAL ANALYSIS: {ticker}", color='#00ff41', fontsize=14, fontfamily='monospace')
+            
+            st.pyplot(fig)
+            
+            # Bảng dữ liệu
+            with st.expander(">> VIEW RAW DATA MATRIX"):
+                res_df = pd.DataFrame({'ACTUAL': test, 'PREDICT': preds})
+                res_df['DIFF'] = res_df['ACTUAL'] - res_df['PREDICT']
+                st.dataframe(res_df.style.highlight_max(axis=0))
+
         except Exception as e:
-            st.error(f"SYSTEM ERROR: {e}")
-            
-            # --- XỬ LÝ DỮ LIỆU CHỐNG LỖI (FIXED) ---
-            # 1. Xử lý MultiIndex (trường hợp yfinance trả về 2 tầng cột)
-            if isinstance(df.columns, pd.MultiIndex):
-                # Chỉ lấy tầng tên cột, bỏ tầng mã chứng khoán
-                df.columns = df.columns.get_level_values(0)
-
-            # 2. Tìm cột giá phù hợp
-            if 'Adj Close' in df.columns:
-                data = df['Adj Close']
-            elif 'Close' in df.columns:
-                data = df['Close']
-            else:
-                # Nếu bí quá thì lấy cột số đầu tiên
-                data = df.iloc[:, 0]
-            
-            # Đảm bảo data là Series 1 chiều, không phải DataFrame
-            if isinstance(data, pd.DataFrame):
-                data = data.iloc[:, 0]
-            # ----------------------------------------
-            
-            # Resample dữ liệu
-            if freq_option == "Tháng (Monthly)":
-                data = data.resample('M').last()
-                seasonal_p = 12
-            elif freq_option == "Quý (Quarterly)":
-                data = data.resample('Q').last()
-                seasonal_p = 4
-            else: # Daily
-                data = data.asfreq('B').fillna(method='ffill')
-                seasonal_p = 5
-
-            # Chia Train/Test
-            if len(data) < test_size + 5:
-                 st.error(f"Dữ liệu quá ngắn ({len(data)} dòng) không đủ để dự báo.")
-                 st.stop()
-
-            train = data.iloc[:-test_size]
-            test = data.iloc[-test_size:]
-            
-            st.success(f"Đã tải dữ liệu {ticker}. Kích thước Train: {len(train)}, Test: {len(test)}")
-            
-        except Exception as e:
-            st.error(f"Chi tiết lỗi: {e}")
-            st.stop()
-
-    # --- BƯỚC 2: CHẠY MÔ HÌNH DỰ BÁO ---
-    st.subheader(f"Kết quả Dự báo: {model_option}")
-    
-    predictions = pd.Series(index=test.index, dtype='float64')
-    params_info = ""
-    
-    try:
-        if model_option == "Naive (Ngây thơ)":
-            pred_values = pd.concat([train.iloc[-1:], test[:-1]]).values
-            predictions[:] = pred_values.ravel()
-            params_info = "Dùng giá trị phiên trước đó"
-
-        elif model_option == "Moving Average":
-            rolling_ma = data.rolling(window=window_size).mean().shift(1)
-            predictions = rolling_ma.loc[test.index]
-            params_info = f"Window size = {window_size}"
-
-        elif model_option == "Simple Exponential Smoothing (SES)":
-            alpha_opt = find_optimal_params(train, 'SES')[0]
-            model = SimpleExpSmoothing(train).fit(smoothing_level=alpha_opt, optimized=False)
-            predictions = model.forecast(len(test))
-            params_info = f"Alpha tối ưu = {alpha_opt:.4f}"
-
-        elif model_option == "Holt's Linear (Trend)":
-            params = find_optimal_params(train, 'Holt')
-            model = ExponentialSmoothing(train, trend='add', seasonal=None, damped_trend=False).fit(
-                smoothing_level=params[0], smoothing_trend=params[1], optimized=False)
-            predictions = model.forecast(len(test))
-            params_info = f"Alpha={params[0]:.4f}, Beta={params[1]:.4f}"
-
-        elif model_option == "Holt-Winters (Trend + Seasonality)":
-            params = find_optimal_params(train, 'Holt-Winters', seasonal_periods=seasonal_p)
-            model = ExponentialSmoothing(train, trend='add', seasonal='add', seasonal_periods=seasonal_p).fit(
-                smoothing_level=params[0], smoothing_trend=params[1], smoothing_seasonal=params[2], optimized=False)
-            predictions = model.forecast(len(test))
-            params_info = f"Alpha={params[0]:.2f}, Beta={params[1]:.2f}, Gamma={params[2]:.2f}"
-
-    except Exception as e:
-        st.error(f"Lỗi khi chạy mô hình: {e}")
-        st.stop()
-
-    # --- BƯỚC 3: ĐÁNH GIÁ VÀ HIỂN THỊ ---
-    
-    # Làm sạch NaN
-    valid_idx = ~np.isnan(predictions) & ~np.isnan(test)
-    if valid_idx.sum() > 0:
-        rmse = np.sqrt(mean_squared_error(test[valid_idx], predictions[valid_idx]))
-        mae = mean_absolute_error(test[valid_idx], predictions[valid_idx])
-        mape = mean_absolute_percentage_error(test[valid_idx], predictions[valid_idx]) * 100
-        
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("RMSE", f"{rmse:.2f}")
-        col2.metric("MAE", f"{mae:.2f}")
-        col3.metric("MAPE (Sai số %)", f"{mape:.2f}%")
-        col4.info(f"Tham số: {params_info}")
-    else:
-        st.warning("Không đủ dữ liệu để tính sai số.")
-
-    # Vẽ biểu đồ
-    fig, ax = plt.subplots(figsize=(14, 7))
-    
-    display_train = 100 if len(train) > 100 else len(train)
-    ax.plot(train.index[-display_train:], train.iloc[-display_train:], label='Dữ liệu Huấn luyện (Train)', color='gray', alpha=0.5)
-    ax.plot(test.index, test, label='Thực tế (Actual)', color='black', linewidth=2)
-    ax.plot(test.index, predictions, label=f'Dự báo ({model_option})', color='red', linestyle='--', linewidth=2, marker='o')
-    
-    ax.set_title(f'Biểu đồ So sánh Thực tế vs Dự báo: {ticker}', fontsize=16)
-    ax.set_ylabel('Giá Cổ phiếu')
-    ax.set_xlabel('Thời gian')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-    
-    st.pyplot(fig)
-
-    with st.expander("Xem dữ liệu chi tiết"):
-        results_df = pd.DataFrame({'Thực tế': test, 'Dự báo': predictions})
-        results_df['Sai lệch'] = results_df['Thực tế'] - results_df['Dự báo']
-        st.dataframe(results_df)
-
+            st.error(f"SYSTEM FAILURE: {e}")
 else:
-    st.info("👈 Vui lòng nhập mã cổ phiếu và nhấn nút 'Phân tích & Dự báo' ở thanh bên trái.")
-
+    # Màn hình chờ
+    st.markdown("""
+        <div style='text-align: center; margin-top: 100px; color: #333;'>
+            <h3>SYSTEM READY...</h3>
+            <p>ENTER PARAMETERS ON THE LEFT TO INITIATE</p>
+        </div>
+    """, unsafe_allow_html=True)
