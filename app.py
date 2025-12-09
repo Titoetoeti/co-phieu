@@ -18,7 +18,7 @@ def get_base64_of_bin_file(bin_file):
 
 # Thay 'background.jpg' bằng tên file ảnh của bạn
 # Nếu ảnh là png thì đổi thành 'background.png'
-img_file = "T1ALL.jpg" 
+img_file = "T1 ALL.jpg" 
 
 try:
     bin_str = get_base64_of_bin_file(img_file)
@@ -26,7 +26,7 @@ try:
     page_bg_img = f'''
     <style>
     .stApp {{
-        background-image: url("data:image/jpg;base64,{bin_str}");
+        background-image: url("data:T1 ALL/jpg;base64,{bin_str}");
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
@@ -331,5 +331,6 @@ else:
         </div>
         <style>@keyframes blinker { 50% { opacity: 0; } }</style>
     """, unsafe_allow_html=True)
+
 
 
