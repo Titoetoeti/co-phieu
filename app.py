@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
 import yfinance as yf
 from statsmodels.tsa.api import SimpleExpSmoothing, ExponentialSmoothing
 from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error
@@ -10,51 +9,47 @@ from scipy.optimize import minimize
 import warnings
 
 # ==============================================================================
-# 1. CẤU HÌNH & CSS (GIAO DIỆN HACKER + FONT PIXEL)
+# 1. CẤU HÌNH & CSS (GIAO DIỆN PIXEL - BIỂU ĐỒ CHUẨN)
 # ==============================================================================
 warnings.filterwarnings("ignore")
-st.set_page_config(page_title="PIXEL CYBER TRADER", layout="wide", page_icon="⚡")
+st.set_page_config(page_title="PIXEL TRADER PRO", layout="wide", page_icon="📈")
 
-# Thiết lập style cho biểu đồ Matplotlib sang Dark Mode
+# Thiết lập style cho biểu đồ
 plt.style.use('dark_background')
 
-# CSS TÙY CHỈNH MẠNH
 st.markdown("""
     <style>
-        /* Import Font Pixel: Press Start 2P (Tiêu đề) và VT323 (Nội dung) */
+        /* Import Font: Press Start 2P (Tiêu đề) và VT323 (Số liệu) */
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
 
         /* 1. ẨN TOP BAR */
-        header[data-testid="stHeader"] {
-            visibility: hidden;
-        }
+        header[data-testid="stHeader"] { visibility: hidden; }
 
-        /* 2. NỀN TỔNG THỂ - GIỮ MÀU ĐEN HACKER */
+        /* 2. NỀN TỔNG THỂ */
         .stApp {
-            background-color: #050505;
-            color: #00ff41; /* Xanh Neon cũ */
-            font-family: 'VT323', monospace; /* Font Pixel dễ đọc */
-            font-size: 22px; /* Tăng size chữ lên xíu vì font pixel hơi nhỏ */
+            background-color: #0d0d0d; /* Đen dịu hơn chút để đỡ mỏi mắt */
+            color: #00ff41;
+            font-family: 'VT323', monospace;
+            font-size: 22px;
         }
 
-        /* 3. INPUTS & SELECTBOX (Ở GIỮA) */
+        /* 3. INPUTS & SELECTBOX */
         div[data-baseweb="input"] > div, div[data-baseweb="select"] > div {
-            background-color: #0f0f0f !important;
+            background-color: #000 !important;
             color: #00ff41 !important;
-            border: 1px solid #333;
+            border: 2px solid #333; /* Viền mảnh lại cho tinh tế */
             border-radius: 0px;
             font-family: 'VT323', monospace !important;
             font-size: 22px;
         }
         
-        /* Font chữ chung */
         label, .stMarkdown, p, span {
             color: #00ff41 !important;
             font-family: 'VT323', monospace !important;
             font-size: 22px !important;
         }
 
-        /* 4. TIÊU ĐỀ & NÚT BẤM -> DÙNG FONT GAME 8-BIT ĐẬM */
+        /* 4. TIÊU ĐỀ & NÚT BẤM */
         h1, h2, h3 {
             font-family: 'Press Start 2P', cursive !important;
             color: #00ff41 !important;
@@ -67,8 +62,8 @@ st.markdown("""
             background-color: #000;
             color: #00ff41;
             border: 2px solid #00ff41;
-            font-family: 'Press Start 2P', cursive; /* Font Game */
-            font-size: 16px; 
+            font-family: 'Press Start 2P', cursive;
+            font-size: 14px;
             padding: 15px;
             transition: 0.3s;
             margin-top: 20px;
@@ -76,43 +71,35 @@ st.markdown("""
         div.stButton > button:hover {
             background-color: #00ff41;
             color: #000;
-            box-shadow: 0 0 20px #00ff41;
+            box-shadow: 0 0 15px #00ff41;
         }
 
-        /* 5. HIỆU ỨNG NHẤP NHÁY GIỮ NGUYÊN */
-        @keyframes blinker {
-            50% { opacity: 0; }
-        }
+        /* 5. HIỆU ỨNG NHẤP NHÁY */
+        @keyframes blinker { 50% { opacity: 0; } }
         .blinking-text {
             animation: blinker 1s step-end infinite;
             color: #00ff41;
             font-family: 'Press Start 2P', cursive;
-            font-size: 20px;
+            font-size: 18px;
             text-align: center;
             margin-top: 50px;
             text-shadow: 0 0 10px #00ff41;
             line-height: 2;
         }
         
-        /* 6. KHUNG CHỨA CONTROL PANEL */
+        /* 6. CONTROL PANEL */
         .control-panel {
             border: 1px solid #333;
             padding: 20px;
             background-color: #0a0a0a;
             margin-bottom: 30px;
-            box-shadow: 0 0 15px rgba(0, 255, 65, 0.1);
+            box-shadow: 0 0 10px rgba(0, 255, 65, 0.1);
         }
-        
-        /* Bảng dữ liệu */
-        div[data-testid="stDataFrame"] {
-            font-family: 'VT323', monospace !important;
-        }
-
     </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. LOGIC TÍNH TOÁN (CORE ENGINE)
+# 2. LOGIC TÍNH TOÁN
 # ==============================================================================
 def find_optimal_params(train_data, model_type, seasonal_periods=None):
     bounds_limit = (0.01, 0.99)
@@ -138,12 +125,10 @@ def find_optimal_params(train_data, model_type, seasonal_periods=None):
     return res.x
 
 # ==============================================================================
-# 3. GIAO DIỆN TRUNG TÂM
+# 3. GIAO DIỆN
 # ==============================================================================
-
-# Tiêu đề chính (Font 8-bit)
 st.markdown("<h1 style='text-align: center; font-size: 40px; text-shadow: 0 0 10px #00ff41;'>⚡ PIXEL TRADER ⚡</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; letter-spacing: 2px; color: #555 !important;'>ADVANCED PREDICTION SYSTEM [8-BIT EDITION]</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; letter-spacing: 2px; color: #555 !important;'>ADVANCED PREDICTION SYSTEM [PRO EDITION]</p>", unsafe_allow_html=True)
 st.markdown("---")
 
 c1, c2, c3 = st.columns([1, 2, 1]) 
@@ -178,14 +163,15 @@ freq_val = freq_map[freq_display]
 if btn_run:
     st.markdown(f"<h3 style='text-align: center;'>LOADING DATA: {ticker}...</h3>", unsafe_allow_html=True)
     
-    # Thanh loading Pixel
+    # Thanh loading Text
     progress_text = st.empty()
     for i in range(101):
-        bar = "█" * (i // 4) + "-" * ((100 - i) // 4)
+        bar = "█" * (i // 5) + "-" * ((100 - i) // 5)
         progress_text.text(f"LOADING: [{bar}] {i}%")
     progress_text.empty()
     
     try:
+        # Tải và xử lý dữ liệu (Fix lỗi kỹ càng)
         df = yf.download(ticker, period="5y", progress=False)
         if df.empty:
             st.error("❌ ERROR: DATA NOT FOUND.")
@@ -193,7 +179,15 @@ if btn_run:
         
         if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
         df.columns = [str(c).lower().strip() for c in df.columns]
-        col = 'adj close' if 'adj close' in df.columns else ('close' if 'close' in df.columns else df.columns[0])
+        
+        # Logic tìm cột giá thông minh
+        col = None
+        for c in ['adj close', 'close', 'price']:
+            if c in df.columns:
+                col = c
+                break
+        if col is None: col = df.columns[0]
+            
         data = df[col].astype(float)
         if data.index.tz is not None: data.index = data.index.tz_localize(None)
         
@@ -226,22 +220,27 @@ if btn_run:
             mape = mean_absolute_percentage_error(test[mask], preds[mask]) * 100
             
             m1, m2, m3 = st.columns(3)
-            # Dùng HTML để hiển thị số font Pixel to
             m1.markdown(f"<div style='border:1px solid #00ff41; padding:10px; text-align:center'><h3>RMSE</h3><h1 style='font-family:VT323; font-size:40px'>{rmse:.2f}</h1></div>", unsafe_allow_html=True)
             m2.markdown(f"<div style='border:1px solid #00ff41; padding:10px; text-align:center'><h3>MAPE</h3><h1 style='font-family:VT323; font-size:40px'>{mape:.2f}%</h1></div>", unsafe_allow_html=True)
             m3.info(f"PARAMS: {info}")
 
+        # --- VẼ BIỂU ĐỒ (ĐƯỜNG THẲNG - CHUẨN) ---
         fig, ax = plt.subplots(figsize=(14, 6), facecolor='black')
         ax.set_facecolor('black')
         
-        # Vẽ kiểu Pixel: Dùng step (bậc thang) thay vì đường thẳng
-        ax.plot(train.index[-100:], train.iloc[-100:], color='#333', label='TRAIN', linestyle='--')
-        ax.plot(test.index, test, color='#00ff41', linewidth=2, label='ACTUAL', drawstyle='steps-mid') 
-        ax.plot(test.index, preds, color='#ff00ff', linestyle='--', linewidth=2, marker='s', label='PREDICT')
+        # Vẽ Train (Màu xám, đường liền)
+        ax.plot(train.index[-100:], train.iloc[-100:], color='#555555', label='TRAIN DATA', linewidth=1.5)
         
-        ax.grid(color='#222', linestyle=':')
-        ax.legend(facecolor='black', edgecolor='#333', labelcolor='#00ff41', prop={'family':'monospace'})
-        ax.tick_params(colors='#00ff41', labelsize=12)
+        # Vẽ Actual (Màu xanh neon, đường liền, nét đậm)
+        ax.plot(test.index, test, color='#00ff41', linewidth=2.5, label='ACTUAL PRICE')
+        
+        # Vẽ Predict (Màu tím, nét đứt, marker chấm tròn nhỏ)
+        ax.plot(test.index, preds, color='#ff00ff', linestyle='--', linewidth=2, marker='o', markersize=5, label='PREDICTION')
+        
+        # Trang trí lưới và trục
+        ax.grid(color='#333', linestyle=':', linewidth=0.5)
+        ax.legend(facecolor='black', edgecolor='#333', labelcolor='#fff')
+        ax.tick_params(colors='#fff', labelsize=10) # Dùng font mặc định của mpl cho dễ đọc
         for s in ax.spines.values(): s.set_edgecolor('#333')
         
         st.pyplot(fig)
