@@ -7,6 +7,47 @@ from statsmodels.tsa.api import SimpleExpSmoothing, ExponentialSmoothing
 from sklearn.metrics import mean_squared_error, mean_absolute_percentage_error
 from scipy.optimize import minimize
 import warnings
+# ==============================================================================
+
+import base64
+
+def get_base64_of_bin_file(bin_file):
+    with open(bin_file, 'rb') as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
+# Thay 'background.jpg' bằng tên file ảnh của bạn
+# Nếu ảnh là png thì đổi thành 'background.png'
+img_file = "T1 ALL.jpg" 
+
+try:
+    bin_str = get_base64_of_bin_file(img_file)
+    # Tạo chuỗi CSS chứa ảnh nền
+    page_bg_img = f'''
+    <style>
+    .stApp {{
+        background-image: url("data:image/jpg;base64,{bin_str}");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+    }}
+    /* Thêm lớp phủ đen mờ để chữ dễ đọc hơn nếu ảnh quá sáng */
+    .stApp::before {{
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.7); /* Số 0.7 là độ tối (0 đến 1) */
+        z-index: -1;
+    }}
+    </style>
+    '''
+except:
+    # Nếu không tìm thấy ảnh thì thôi, không lỗi app
+    page_bg_img = ""
 
 # ==============================================================================
 # 1. CẤU HÌNH & CSS (V2.6: DIỆT NÚT TRẮNG)
@@ -14,7 +55,9 @@ import warnings
 warnings.filterwarnings("ignore")
 st.set_page_config(page_title="PIXEL TRADER PRO", layout="wide", page_icon="📈")
 plt.style.use('dark_background')
-
+# Kích hoạt ảnh nền (Thêm dòng này)
+if page_bg_img:
+    st.markdown(page_bg_img, unsafe_allow_html=True)
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
@@ -25,7 +68,7 @@ st.markdown("""
 
         /* 2. NỀN CHÍNH & MÀU CHỮ */
         .stApp {
-            background-color: #0d0d0d;
+            background-color: transparent;
             color: #00ff41;
             font-family: 'VT323', monospace;
             font-size: 20px;
@@ -288,3 +331,4 @@ else:
         </div>
         <style>@keyframes blinker { 50% { opacity: 0; } }</style>
     """, unsafe_allow_html=True)
+
