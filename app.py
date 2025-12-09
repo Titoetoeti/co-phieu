@@ -1,16 +1,3 @@
-Chào bạn, đây là yêu cầu cuối cùng để hoàn thiện "tác phẩm" này.
-
-Tôi đã thực hiện các thay đổi chính xác như bạn muốn:
-
-1.  **Tiêu đề (H1):** Phóng to hết cỡ (`70px`), dùng font `Press Start 2P` đậm chất game, nhìn cực kỳ hoành tráng.
-2.  **Chỉ số (RMSE, MAPE, PARAMS):** Tôi đã ép cứng font chữ cho chúng:
-      * Tên chỉ số (RMSE...): Dùng font **Press Start 2P** (Vuông vức).
-      * Con số kết quả: Dùng font **VT323** (Dạng LED/Terminal) và phóng to lên để dễ đọc nhưng vẫn giữ chất Pixel.
-3.  **Giữ nguyên:** Màu sắc nút bấm (Đen/Xanh), Input chữ trắng, Layout...
-
-Đây là bản **FINAL CODE**. Bạn copy đè vào `app.py` nhé:
-
-```python
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -328,4 +315,3 @@ else:
         </div>
         <style>@keyframes blinker { 50% { opacity: 0; } }</style>
     """, unsafe_allow_html=True)
-```
