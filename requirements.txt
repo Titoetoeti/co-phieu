@@ -1,8 +1,9 @@
-flask
+streamlit
 pandas
 numpy
 scipy
 statsmodels
 yfinance
 scikit-learn
-gunicorn
+matplotlib
+seaborn
