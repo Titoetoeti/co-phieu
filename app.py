@@ -53,41 +53,149 @@ def find_optimal_params(train_data, model_type, seasonal_periods=None):
 # 2. GIAO DIỆN VÀ XỬ LÝ CHÍNH
 # ==============================================================================
 
-st.title("📈 Ứng Dụng Dự Báo Giá Cổ Phiếu Chuyên Sâu")
+st.title("Dự Báo Giá Cổ Phiếu")
 st.markdown("---")
 
-# --- SIDEBAR: INPUT NGƯỜI DÙNG ---
-st.sidebar.header("Cấu hình Dự báo")
+import streamlit as st
+import yfinance as yf
 
-ticker = st.sidebar.text_input("Nhập mã cổ phiếu (Ví dụ: AAPL, TSLA, VNM.VN):", value="AAPL")
+# ==============================================================================
+# 1. SETUP GIAO DIỆN DARK MODE & TECH STYLE (CSS)
+# ==============================================================================
+# Lưu ý: Đặt dòng này ngay đầu file app.py, sau các lệnh import
+st.markdown("""
+    <style>
+        /* 1. Nền tổng thể và Sidebar màu đen sâu */
+        .stApp {
+            background-color: #0e1117; /* Màu nền chính tối */
+        }
+        [data-testid="stSidebar"] {
+            background-color: #000000; /* Sidebar đen tuyền */
+            border-right: 1px solid #222222; /* Viền mỏng tinh tế */
+        }
 
-freq_option = st.sidebar.selectbox(
-    "Chọn khung thời gian dữ liệu:",
-    ("Ngày (Daily)", "Tháng (Monthly)", "Quý (Quarterly)")
-)
+        /* 2. Tùy chỉnh Tiêu đề Sidebar */
+        .sidebar-title {
+            color: #ffffff;
+            font-family: 'Courier New', monospace; /* Font kiểu code */
+            font-size: 24px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #00ff41; /* Gạch chân xanh neon */
+            padding-bottom: 10px;
+        }
 
-model_option = st.sidebar.selectbox(
-    "Chọn kỹ thuật dự báo:",
-    ("Naive (Ngây thơ)", "Moving Average (Trung bình trượt)", "Simple Exponential Smoothing (SES)", 
-     "Holt's Linear (Trend)", "Holt-Winters (Trend + Seasonality)")
-)
+        /* 3. Tùy chỉnh Input và Selectbox */
+        div[data-baseweb="input"] > div {
+            background-color: #111111 !important;
+            color: #00ff41 !important; /* Chữ xanh neon khi gõ */
+            border: 1px solid #333333;
+            border-radius: 4px;
+        }
+        div[data-baseweb="select"] > div {
+            background-color: #111111 !important;
+            color: white !important;
+            border: 1px solid #333333;
+            border-radius: 4px;
+        }
+        label {
+            color: #aaaaaa !important; /* Màu nhãn xám nhạt hiện đại */
+            font-size: 12px !important;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
 
-window_size = 0
-if model_option == "Moving Average (Trung bình trượt)":
-    window_size = st.sidebar.slider("Chọn cửa sổ trượt (Window):", min_value=2, max_value=50, value=3)
+        /* 4. Nút bấm phong cách Cyberpunk */
+        div.stButton > button {
+            width: 100%;
+            background: linear-gradient(90deg, #000000, #1a1a1a);
+            color: #00ff41; /* Chữ xanh neon */
+            border: 1px solid #00ff41;
+            padding: 12px 24px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        div.stButton > button:hover {
+            background-color: #00ff41;
+            color: #000000;
+            box-shadow: 0 0 15px rgba(0, 255, 65, 0.5); /* Hiệu ứng phát sáng */
+            border-color: #00ff41;
+        }
+        
+        /* 5. Slider */
+        div[data-baseweb="slider"] div {
+            background-color: #00ff41 !important; /* Thanh trượt xanh */
+        }
 
-test_size = st.sidebar.slider("Số điểm dữ liệu dùng để Test (Backtest):", min_value=4, max_value=60, value=12)
+    </style>
+""", unsafe_allow_html=True)
 
-if st.sidebar.button("🚀 Phân tích & Dự báo"):
+# ==============================================================================
+# 2. CODE SIDEBAR ĐÃ TỐI GIẢN
+# ==============================================================================
+
+# Tạo tiêu đề thủ công bằng HTML để đẹp hơn st.header
+st.sidebar.markdown('<div class="sidebar-title">⚡ STOCK.AI</div>', unsafe_allow_html=True)
+
+# Nhập liệu (Dùng placeholder để gọn gàng hơn)
+ticker = st.sidebar.text_input(
+    "Mã tài sản (Symbol)", 
+    value="META", 
+    placeholder="VD: AAPL, BTC-USD..."
+).upper()
+
+st.sidebar.markdown("---") # Đường kẻ phân cách mờ
+
+# Nhóm các cấu hình vào 2 cột nhỏ hoặc để trơn cho thoáng
+col1, col2 = st.sidebar.columns(2)
+with col1:
+    freq_option = st.selectbox("Khung thời gian", ("Ngày", "Tháng", "Quý"))
+
+with col2:
+    # Logic mapping đơn giản để code gọn hơn
+    model_map = {
+        "Naive": "Naive", 
+        "Moving Average": "MA", 
+        "Simple Exponential Smoothing": "SES", 
+        "Holt's Linear": "Holt", 
+        "Holt-Winters": "HW"
+    }
+    # Hiển thị tên đầy đủ, nhưng lấy giá trị viết tắt để xử lý logic
+    model_display = st.selectbox("Thuật toán", list(model_map.keys()))
+    model_option = model_display # Giữ nguyên biến cũ để không hỏng code dưới
+
+# Cấu hình nâng cao (Ẩn bớt để tối giản, chỉ hiện khi cần)
+with st.sidebar.expander("⚙️ Cấu hình nâng cao", expanded=True):
+    window_size = 0
+    if model_option == "Moving Average":
+        window_size = st.slider("Cửa sổ trượt (Window)", 2, 50, 3)
     
-    with st.spinner('Đang tải và xử lý dữ liệu...'):
+    test_size = st.slider("Backtest Size (Kỳ)", 4, 60, 12)
+
+st.sidebar.markdown("<br>", unsafe_allow_html=True) # Khoảng trắng
+
+# Nút bấm (Đã được CSS biến thành nút Cyberpunk)
+if st.sidebar.button("KHỞI CHẠY PHÂN TÍCH"):
+    
+    with st.spinner('SYSTEM PROCESSING...'):
         try:
-            # Tải dữ liệu
+            # Code tải dữ liệu giữ nguyên
             df = yf.download(ticker, period="5y", progress=False)
             
             if df.empty:
-                st.error("Không tìm thấy dữ liệu cổ phiếu. Vui lòng kiểm tra lại mã.")
+                st.error("❌ DATA NOT FOUND.")
                 st.stop()
+            
+            # ... (Phần xử lý tiếp theo của bạn giữ nguyên) ...
+            
+        except Exception as e:
+            st.error(f"SYSTEM ERROR: {e}")
             
             # --- XỬ LÝ DỮ LIỆU CHỐNG LỖI (FIXED) ---
             # 1. Xử lý MultiIndex (trường hợp yfinance trả về 2 tầng cột)
@@ -146,7 +254,7 @@ if st.sidebar.button("🚀 Phân tích & Dự báo"):
             predictions[:] = pred_values.ravel()
             params_info = "Dùng giá trị phiên trước đó"
 
-        elif model_option == "Moving Average (Trung bình trượt)":
+        elif model_option == "Moving Average":
             rolling_ma = data.rolling(window=window_size).mean().shift(1)
             predictions = rolling_ma.loc[test.index]
             params_info = f"Window size = {window_size}"
@@ -215,3 +323,4 @@ if st.sidebar.button("🚀 Phân tích & Dự báo"):
 
 else:
     st.info("👈 Vui lòng nhập mã cổ phiếu và nhấn nút 'Phân tích & Dự báo' ở thanh bên trái.")
+
