@@ -7,140 +7,122 @@ from statsmodels.tsa.api import SimpleExpSmoothing, ExponentialSmoothing
 from sklearn.metrics import mean_squared_error, mean_absolute_percentage_error
 from scipy.optimize import minimize
 import warnings
-# ==============================================================================
-
+import time
 import base64
 
-def get_base64_of_bin_file(bin_file):
-    with open(bin_file, 'rb') as f:
-        data = f.read()
-    return base64.b64encode(data).decode()
-
-# Thay 'background.jpg' bằng tên file ảnh của bạn
-# Nếu ảnh là png thì đổi thành 'background.png'
-img_file = "T1 ALL.jpg" 
-
-try:
-    bin_str = get_base64_of_bin_file(img_file)
-    # Tạo chuỗi CSS chứa ảnh nền
-    page_bg_img = f'''
-    <style>
-    .stApp {{
-        background-image: url("data:T1 ALL/jpg;base64,{bin_str}");
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
-    }}
-    /* Thêm lớp phủ đen mờ để chữ dễ đọc hơn nếu ảnh quá sáng */
-    .stApp::before {{
-        content: "";
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0, 0, 0, 0.7); /* Số 0.7 là độ tối (0 đến 1) */
-        z-index: -1;
-    }}
-    </style>
-    '''
-except:
-    # Nếu không tìm thấy ảnh thì thôi, không lỗi app
-    page_bg_img = ""
-
 # ==============================================================================
-# 1. CẤU HÌNH & CSS (V2.6: DIỆT NÚT TRẮNG)
+# 1. CẤU HÌNH & HÀM INTRO VIDEO (V3.1: VERTICAL VIDEO & NO BG)
 # ==============================================================================
 warnings.filterwarnings("ignore")
 st.set_page_config(page_title="PIXEL TRADER PRO", layout="wide", page_icon="📈")
 plt.style.use('dark_background')
-# Kích hoạt ảnh nền (Thêm dòng này)
-if page_bg_img:
-    st.markdown(page_bg_img, unsafe_allow_html=True)
+
+# --- HÀM 1: INTRO VIDEO (Đã đổi tên file thành 1210.mp4) ---
+def show_intro_video(video_file, duration=8):
+    if 'intro_done' not in st.session_state:
+        st.session_state['intro_done'] = False
+
+    if not st.session_state['intro_done']:
+        try:
+            with open(video_file, "rb") as f:
+                video_bytes = f.read()
+            video_str = base64.b64encode(video_bytes).decode()
+            
+            # CSS đè toàn màn hình màu đen
+            intro_html = f"""
+            <style>
+                .stApp {{ overflow: hidden; }}
+                #intro-overlay {{
+                    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+                    background-color: black; z-index: 999999;
+                    display: flex; justify-content: center; align-items: center;
+                }}
+                #intro-video {{ 
+                    width: 100%; height: 100%; 
+                    object-fit: cover; /* Tự động zoom video dọc cho kín màn hình */
+                }}
+            </style>
+            <div id="intro-overlay">
+                <video id="intro-video" autoplay muted playsinline>
+                    <source src="data:video/mp4;base64,{video_str}" type="video/mp4">
+                </video>
+            </div>
+            """
+            placeholder = st.empty()
+            placeholder.markdown(intro_html, unsafe_allow_html=True)
+            time.sleep(duration)
+            placeholder.empty()
+            st.session_state['intro_done'] = True
+            st.rerun()
+        except FileNotFoundError:
+            st.session_state['intro_done'] = True # Bỏ qua nếu không có file
+
+# --- KÍCH HOẠT INTRO ---
+# Nhớ đảm bảo file 1210.mp4 nằm cùng thư mục với app.py
+show_intro_video("1210.mp4", duration=7) 
+
+
+# ==============================================================================
+# 2. CSS GIAO DIỆN (PIXEL STYLE FINAL)
+# ==============================================================================
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
 
-        /* 1. ẨN MENU */
+        /* ẨN MENU */
         header[data-testid="stHeader"] { visibility: hidden; }
         .block-container { padding-top: 2rem; }
 
-        /* 2. NỀN CHÍNH & MÀU CHỮ */
+        /* MÀU CHỮ CHÍNH & NỀN ĐEN SÂU (Đã bỏ ảnh nền) */
         .stApp {
-            background-color: #0d0d0d;
+            background-color: #0d0d0d; /* Nền đen chuẩn */
             color: #00ff41;
             font-family: 'VT323', monospace;
             font-size: 20px;
         }
-
-        /* 3. INPUTS (GIỮ NGUYÊN) */
-        input {
-            color: #ffffff !important; 
-            font-family: 'VT323', monospace !important;
-            font-size: 22px !important;
-        }
-        div[data-baseweb="select"] > div {
-            background-color: #000 !important;
-            color: #ffffff !important; 
-            border-color: #00ff41 !important;
-        }
-        div[data-baseweb="input"] > div {
-            background-color: #000 !important;
-            border: 2px solid #00ff41 !important;
-            border-radius: 0px;
-        }
+        
+        /* INPUTS CHỮ TRẮNG */
+        input { color: #ffffff !important; font-family: 'VT323', monospace !important; font-size: 22px !important; }
+        div[data-baseweb="select"] > div { background-color: #000 !important; color: #ffffff !important; border-color: #00ff41 !important; }
+        div[data-baseweb="input"] > div { background-color: #000 !important; border: 2px solid #00ff41 !important; border-radius: 0px; }
         div[data-baseweb="select"] svg { fill: #00ff41 !important; }
 
-        /* 4. NHÃN & TIÊU ĐỀ */
-        label p {
-            font-size: 18px !important;
-            font-family: 'Press Start 2P', cursive !important;
-            color: #00ff41 !important;
-        }
+        /* TEXT STYLES */
+        label p { font-size: 18px !important; font-family: 'Press Start 2P', cursive !important; color: #00ff41 !important; }
+        
+        /* TIÊU ĐỀ TO */
         h1 {
-            font-family: 'Press Start 2P', cursive;
-            text-align: center;
-            color: #00ff41;
-            text-shadow: 4px 4px 0px #003300;
+            font-family: 'Press Start 2P', cursive !important;
+            text-align: center; color: #00ff41;
+            text-shadow: 6px 6px 0px #003300;
+            font-size: 70px !important; line-height: 1.2 !important;
+            margin-bottom: 10px !important; margin-top: 0px !important;
         }
-        .sub-title {
-            text-align: center; font-family: 'VT323'; font-size: 24px; color: #555; letter-spacing: 4px; margin-bottom: 30px;
-        }
+        .sub-title { text-align: center; font-family: 'VT323'; font-size: 24px; color: #555; letter-spacing: 4px; margin-bottom: 30px; }
 
-        /* 5. CƯỠNG CHẾ TOÀN BỘ NÚT BẤM (FIX LỖI MÀU TRẮNG) */
-        /* Tôi dùng !important để ép mọi nút bấm phải đen */
+        /* NÚT BẤM (SIMPLE BLACK & GREEN - NO WHITE FLASH) */
         div.stButton > button {
             width: 100%;
-            background-color: #000000 !important; /* Nền ĐEN tuyệt đối */
-            color: #00ff41 !important; /* Chữ XANH */
-            border: 2px solid #00ff41 !important; /* Viền XANH */
+            background-color: #000000 !important;
+            color: #00ff41 !important;
+            border: 2px solid #00ff41 !important;
             font-family: 'Press Start 2P', cursive !important;
-            padding: 15px;
-            margin-top: 15px;
-            border-radius: 0px !important; /* Vuông vức */
+            padding: 15px; margin-top: 15px;
+            border-radius: 0px !important;
             transition: all 0.2s ease-in-out;
             box-shadow: none !important;
         }
-
-        /* Hiệu ứng di chuột vào */
         div.stButton > button:hover {
-            background-color: #00ff41 !important; /* Đổi nền thành XANH */
-            color: #000000 !important; /* Chữ thành ĐEN */
-            border-color: #00ff41 !important;
-            box-shadow: 0 0 15px #00ff41 !important; /* Phát sáng */
+            background-color: #00ff41 !important; color: #000000 !important;
+            box-shadow: 0 0 15px #00ff41 !important;
         }
-        
-        /* Hiệu ứng khi bấm */
-        div.stButton > button:active {
-            transform: scale(0.98);
-        }
+        div.stButton > button:active { transform: scale(0.98); }
 
     </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. LOGIC TÍNH TOÁN (GIỮ NGUYÊN)
+# 3. LOGIC TÍNH TOÁN (GIỮ NGUYÊN)
 # ==============================================================================
 def find_optimal_params(train_data, model_type, seasonal_periods=None):
     bounds_limit = (0.01, 0.99)
@@ -193,11 +175,15 @@ def clean_yfinance_data(df):
     return df[col]
 
 # ==============================================================================
-# 3. GIAO DIỆN CHÍNH
+# 4. GIAO DIỆN CHÍNH
 # ==============================================================================
 
-st.markdown("<h1>⚡ PIXEL TRADER ⚡</h1>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>PRO EDITION [v2.6]</div>", unsafe_allow_html=True)
+# Reset VS Mode
+if 'vs_mode' not in st.session_state: st.session_state.vs_mode = False
+
+# TIÊU ĐỀ KHỔNG LỒ
+st.markdown("<h1>PIXEL TRADER</h1>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>ULTIMATE EDITION [v3.1]</div>", unsafe_allow_html=True)
 
 with st.container():
     c1, c2, c3 = st.columns([1, 3, 1]) 
@@ -212,16 +198,17 @@ with st.container():
             test_size = st.slider("BACKTEST SIZE", 4, 60, 12)
         
         st.write("") 
-        # Nút Start Prediction
         btn_run = st.button(">> START PREDICTION <<")
 
 st.markdown("---")
 
 # ==============================================================================
-# 4. XỬ LÝ
+# 5. XỬ LÝ & HIỂN THỊ
 # ==============================================================================
 freq_map = {"DAILY": "D", "MONTHLY": "M", "QUARTERLY": "Q"}
 freq_val = freq_map[freq_display]
+
+if btn_run: st.session_state.vs_mode = False
 
 if btn_run or st.session_state.get('run_success', False):
     st.session_state.run_success = True
@@ -246,22 +233,27 @@ if btn_run or st.session_state.get('run_success', False):
             rmse = np.sqrt(mean_squared_error(test[mask], preds[mask])) if mask.sum() > 0 else 0
             mape = mean_absolute_percentage_error(test[mask], preds[mask]) * 100 if mask.sum() > 0 else 0
 
-            # KẾT QUẢ
+            # METRICS DISPLAY
             st.markdown(f"<div style='text-align:center; font-family:\"Press Start 2P\"; color:#00ff41; margin-bottom:10px'>TARGET: {ticker}</div>", unsafe_allow_html=True)
             c_m1, c_m2, c_m3 = st.columns(3)
-            box_style = "border:2px solid #00ff41; padding:5px; text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;"
-            c_m1.markdown(f"<div style='{box_style}'><div style='font-size:12px; color:#00ff41'>RMSE</div><div style='font-size:28px; color:#fff'>{rmse:.2f}</div></div>", unsafe_allow_html=True)
-            c_m2.markdown(f"<div style='{box_style}'><div style='font-size:12px; color:#00ff41'>MAPE</div><div style='font-size:28px; color:#fff'>{mape:.2f}%</div></div>", unsafe_allow_html=True)
-            c_m3.markdown(f"<div style='border:2px solid #00ffff; padding:5px; text-align:center;'><div style='font-size:12px; color:#00ffff'>PARAMS</div><div style='font-size:24px; color:#fff'>{info}</div></div>", unsafe_allow_html=True)
+            
+            box_style = "border:2px solid #00ff41; padding:10px; text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;"
+            label_font = "font-family: 'Press Start 2P', cursive; font-size: 14px; margin-bottom: 5px; color: #00ff41;"
+            value_font = "font-family: 'VT323', monospace; font-size: 40px; margin: 0; line-height: 1; color: #ffffff;"
+
+            c_m1.markdown(f"<div style='{box_style}'><div style='{label_font}'>RMSE</div><div style='{value_font}'>{rmse:.2f}</div></div>", unsafe_allow_html=True)
+            c_m2.markdown(f"<div style='{box_style}'><div style='{label_font}'>MAPE</div><div style='{value_font}'>{mape:.2f}%</div></div>", unsafe_allow_html=True)
+            c_m3.markdown(f"<div style='border:2px solid #00ffff; padding:10px; text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;'><div style='font-family: \"Press Start 2P\"; font-size: 14px; margin-bottom: 5px; color: #00ffff;'>PARAMS</div><div style='font-family: \"VT323\"; font-size: 35px; margin: 0; line-height: 1; color: #ffffff;'>{info}</div></div>", unsafe_allow_html=True)
 
             st.write("")
             fig, ax = plt.subplots(figsize=(14, 6), facecolor='black')
-            ax.set_facecolor('#050505')
-            ax.plot(train.index[-60:], train.iloc[-60:], color='#555', label='TRAIN')
+            ax.set_facecolor('black')
+            
+            ax.plot(train.index[-60:], train.iloc[-60:], color='#777', label='TRAIN')
             ax.plot(test.index, test, color='#00ff41', linewidth=2.5, label='ACTUAL')
             ax.plot(test.index, preds, color='#ff00ff', linestyle='--', linewidth=2, marker='o', markersize=5, label='PREDICT')
             ax.legend(facecolor='black', edgecolor='#333', labelcolor='#fff')
-            ax.grid(color='#222', linestyle=':')
+            ax.grid(color='#333', linestyle=':')
             for s in ax.spines.values(): s.set_edgecolor('#333')
             st.pyplot(fig)
 
@@ -273,7 +265,6 @@ if btn_run or st.session_state.get('run_success', False):
             with v2:
                 rivals_input = st.text_input("ENTER RIVALS (MÃ ĐỐI THỦ)", value="AAPL, MSFT, GOOG", placeholder="EX: TSLA, AMZN")
                 st.write("")
-                # Nút Fight (CSS sẽ tự áp dụng style chung)
                 btn_fight = st.button(">> START COMPARISON <<")
 
             if btn_fight:
@@ -302,7 +293,7 @@ if btn_run or st.session_state.get('run_success', False):
                 if len(results_map) > 0:
                     st.markdown("<h4 style='text-align:center; font-family:VT323; margin-top:20px'>PREDICTED GROWTH (%) COMPARISON</h4>", unsafe_allow_html=True)
                     fig2, ax2 = plt.subplots(figsize=(14, 7), facecolor='black')
-                    ax2.set_facecolor('#050505')
+                    ax2.set_facecolor('black')
                     colors = ['#00ff41', '#ff00ff', '#00ffff', '#ffcc00', '#ff3333']
                     for idx, (t_name, pred_series) in enumerate(results_map.items()):
                         if len(pred_series) > 0:
@@ -325,13 +316,10 @@ if btn_run or st.session_state.get('run_success', False):
         st.error(f"SYSTEM ERROR: {e}")
 
 else:
+    # Màn hình chờ
     st.markdown("""
         <div style='text-align: center; margin-top: 50px; font-family: "Press Start 2P"; color: #00ff41; animation: blinker 1s step-end infinite;'>
             SYSTEM READY...<br>[ WAITING FOR INPUT ]
         </div>
         <style>@keyframes blinker { 50% { opacity: 0; } }</style>
     """, unsafe_allow_html=True)
-
-
-
-
