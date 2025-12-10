@@ -195,7 +195,7 @@ def clean_yfinance_data(df):
 if 'vs_mode' not in st.session_state: st.session_state.vs_mode = False
 
 st.markdown("<h1>STOCK FORECASTING SYSTEM</h1>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'> MADE BY CONG AND KHANH (FEAT BAO)  [v3.4]</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'> MADE BY NHÓM 6  [CONG, KHANH,BAO]</div>", unsafe_allow_html=True)
 
 with st.container():
     c1, c2, c3 = st.columns([1, 3, 1]) 
@@ -277,7 +277,7 @@ if btn_run or st.session_state.get('run_success', False):
             
             v1, v2, v3 = st.columns([1, 2, 1])
             with v2:
-                rivals_input = st.text_input("ENTER RIVALS (MÃ ĐỐI THỦ)", value="AAPL, MSFT, GOOG", placeholder="EX: TSLA, AMZN")
+                rivals_input = st.text_input("COMPARISION", value="AAPL, MSFT, GOOG", placeholder="EX: TSLA, AMZN")
                 st.write("")
                 btn_fight = st.button(">> START COMPARISON <<")
 
@@ -353,4 +353,5 @@ else:
         </div>
         <style>@keyframes blinker { 50% { opacity: 0; } }</style>
     """, unsafe_allow_html=True)
+
 
