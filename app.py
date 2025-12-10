@@ -15,7 +15,7 @@ import os
 # 1. CẤU HÌNH & HÀM HỖ TRỢ (V3.4: UPDATE VIDEO NAME -> intro.mp4)
 # ==============================================================================
 warnings.filterwarnings("ignore")
-st.set_page_config(page_title="HE THONG CO PHIEU", layout="wide", page_icon="")
+st.set_page_config(page_title="PIXEL TRADER PRO", layout="wide", page_icon="📈")
 plt.style.use('dark_background')
 
 # --- HÀM 1: INTRO VIDEO ---
@@ -194,23 +194,23 @@ def clean_yfinance_data(df):
 
 if 'vs_mode' not in st.session_state: st.session_state.vs_mode = False
 
-st.markdown("<h1>HỆ THỐNG DỰ BÁO CỔ PHIẾU</h1>", unsafe_allow_html=True)
+st.markdown("<h1>PIXEL TRADER</h1>", unsafe_allow_html=True)
 st.markdown("<div class='sub-title'>ULTIMATE EDITION [v3.4]</div>", unsafe_allow_html=True)
 
 with st.container():
     c1, c2, c3 = st.columns([1, 3, 1]) 
     with c2:
-        ticker = st.text_input("NHẬP MÃ", value="META", placeholder="EX: AAPL").upper()
+        ticker = st.text_input("PLAYER 1 (MÃ CHÍNH)", value="META", placeholder="EX: AAPL").upper()
         col_inp1, col_inp2 = st.columns(2)
-        with col_inp1: freq_display = st.selectbox("THỜI GIAN", ("NGÀY", "THÁNG", "NĂM"))
-        with col_inp2: model_display = st.selectbox("MÔ HÌNH", ("Naive", "Moving Average", "SES", "Holt", "Holt-Winters"))
-        with st.expander("⚙️ TÙY CHỌN"):
+        with col_inp1: freq_display = st.selectbox("TIMEFRAME", ("DAILY", "MONTHLY", "QUARTERLY"))
+        with col_inp2: model_display = st.selectbox("WEAPON (MODEL)", ("Naive", "Moving Average", "SES", "Holt", "Holt-Winters"))
+        with st.expander("⚙️ ADVANCED SETTINGS"):
             window_size = 3
             if model_display == "Moving Average": window_size = st.slider("WINDOW SIZE", 2, 50, 3)
-            test_size = st.slider("MẪU KIỂM", 4, 60, 12)
+            test_size = st.slider("BACKTEST SIZE", 4, 60, 12)
         
         st.write("") 
-        btn_run = st.button(">> BẮT ĐẦU<<")
+        btn_run = st.button(">> START PREDICTION <<")
 
 st.markdown("---")
 
@@ -273,13 +273,13 @@ if btn_run or st.session_state.get('run_success', False):
 
             # --- VS MODE ---
             st.markdown("---")
-            st.markdown("<h3 style='text-align:center; color:#ffcc00; font-family:\"Press Start 2P\"'>SO SÁNH CỔ PHIẾU</h3>", unsafe_allow_html=True)
+            st.markdown("<h3 style='text-align:center; color:#ffcc00; font-family:\"Press Start 2P\"'>VS MODE ACTIVATED</h3>", unsafe_allow_html=True)
             
             v1, v2, v3 = st.columns([1, 2, 1])
             with v2:
-                rivals_input = st.text_input("SO SÁNH", value="AAPL, MSFT, GOOG", placeholder="EX: TSLA, AMZN")
+                rivals_input = st.text_input("ENTER RIVALS (MÃ ĐỐI THỦ)", value="AAPL, MSFT, GOOG", placeholder="EX: TSLA, AMZN")
                 st.write("")
-                btn_fight = st.button(">> BẮT ĐẦU<<")
+                btn_fight = st.button(">> START COMPARISON <<")
 
             if btn_fight:
                 rivals = [r.strip().upper() for r in rivals_input.split(",") if r.strip()]
@@ -353,4 +353,3 @@ else:
         </div>
         <style>@keyframes blinker { 50% { opacity: 0; } }</style>
     """, unsafe_allow_html=True)
-
