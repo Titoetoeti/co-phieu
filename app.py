@@ -12,10 +12,10 @@ import base64
 import os
 
 # ==============================================================================
-# 1. CẤU HÌNH & HÀM HỖ TRỢ (V3.4: UPDATE VIDEO NAME -> intro.mp4)
+# 1. CẤU HÌNH & HÀM HỖ TRỢ (V3.5: UPDATE VIDEO NAME -> intro1.mp4)
 # ==============================================================================
 warnings.filterwarnings("ignore")
-st.set_page_config(page_title="TRADER PRO", layout="wide", page_icon="")
+st.set_page_config(page_title="PIXEL TRADER PRO", layout="wide", page_icon="📈")
 plt.style.use('dark_background')
 
 # --- HÀM 1: INTRO VIDEO ---
@@ -78,12 +78,12 @@ def show_intro_video(video_file, duration=8):
         st.error(f"Lỗi Intro: {e}")
         st.session_state['intro_done'] = True
 
-# --- GỌI INTRO (ĐÃ SỬA THÀNH intro.mp4) ---
-show_intro_video("intro.mp4", duration=7)
+# --- GỌI INTRO (ĐÃ SỬA THÀNH intro1.mp4) ---
+show_intro_video("intro1.mp4", duration=7)
 
 
 # ==============================================================================
-# 2. CSS GIAO DIỆN (PIXEL STYLE FINAL)
+# 2. CSS GIAO DIỆN (PIXEL STYLE - GIỮ NGUYÊN)
 # ==============================================================================
 st.markdown("""
     <style>
@@ -99,13 +99,16 @@ st.markdown("""
             font-size: 20px;
         }
         
+        /* INPUTS CHỮ TRẮNG */
         input { color: #ffffff !important; font-family: 'VT323', monospace !important; font-size: 22px !important; }
         div[data-baseweb="select"] > div { background-color: #000 !important; color: #ffffff !important; border-color: #00ff41 !important; }
         div[data-baseweb="input"] > div { background-color: #000 !important; border: 2px solid #00ff41 !important; border-radius: 0px; }
         div[data-baseweb="select"] svg { fill: #00ff41 !important; }
 
+        /* TEXT STYLES */
         label p { font-size: 18px !important; font-family: 'Press Start 2P', cursive !important; color: #00ff41 !important; }
         
+        /* TIÊU ĐỀ KHỔNG LỒ */
         h1 {
             font-family: 'Press Start 2P', cursive !important;
             text-align: center; color: #00ff41;
@@ -115,6 +118,7 @@ st.markdown("""
         }
         .sub-title { text-align: center; font-family: 'VT323'; font-size: 24px; color: #555; letter-spacing: 4px; margin-bottom: 30px; }
 
+        /* NÚT BẤM ĐEN XANH */
         div.stButton > button {
             width: 100%;
             background-color: #000000 !important;
@@ -194,16 +198,16 @@ def clean_yfinance_data(df):
 
 if 'vs_mode' not in st.session_state: st.session_state.vs_mode = False
 
-st.markdown("<h1>STOCK FORECASTING SYSTEM</h1>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'> MADE BY NHÓM 4 [CONG, KHANH,BAO]</div>", unsafe_allow_html=True)
+st.markdown("<h1>PIXEL TRADER</h1>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>ULTIMATE EDITION [v3.5]</div>", unsafe_allow_html=True)
 
 with st.container():
     c1, c2, c3 = st.columns([1, 3, 1]) 
     with c2:
-        ticker = st.text_input("MAIN CODE", value="META", placeholder="EX: AAPL").upper()
+        ticker = st.text_input("PLAYER 1 (MÃ CHÍNH)", value="META", placeholder="EX: AAPL").upper()
         col_inp1, col_inp2 = st.columns(2)
         with col_inp1: freq_display = st.selectbox("TIMEFRAME", ("DAILY", "MONTHLY", "QUARTERLY"))
-        with col_inp2: model_display = st.selectbox("MODEL", ("Naive", "Moving Average", "SES", "Holt", "Holt-Winters"))
+        with col_inp2: model_display = st.selectbox("WEAPON (MODEL)", ("Naive", "Moving Average", "SES", "Holt", "Holt-Winters"))
         with st.expander("⚙️ ADVANCED SETTINGS"):
             window_size = 3
             if model_display == "Moving Average": window_size = st.slider("WINDOW SIZE", 2, 50, 3)
@@ -245,7 +249,7 @@ if btn_run or st.session_state.get('run_success', False):
             rmse = np.sqrt(mean_squared_error(test[mask], preds[mask])) if mask.sum() > 0 else 0
             mape = mean_absolute_percentage_error(test[mask], preds[mask]) * 100 if mask.sum() > 0 else 0
 
-            # METRICS DISPLAY
+            # METRICS DISPLAY (STYLING AS REQUESTED)
             st.markdown(f"<div style='text-align:center; font-family:\"Press Start 2P\"; color:#00ff41; margin-bottom:10px'>TARGET: {ticker}</div>", unsafe_allow_html=True)
             c_m1, c_m2, c_m3 = st.columns(3)
             
@@ -255,13 +259,11 @@ if btn_run or st.session_state.get('run_success', False):
 
             c_m1.markdown(f"<div style='{box_style}'><div style='{label_font}'>RMSE</div><div style='{value_font}'>{rmse:.2f}</div></div>", unsafe_allow_html=True)
             c_m2.markdown(f"<div style='{box_style}'><div style='{label_font}'>MAPE</div><div style='{value_font}'>{mape:.2f}%</div></div>", unsafe_allow_html=True)
-            c_m3.markdown(f"<div style='border:2px solid #00ffff; padding:10px; text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;'><div style='font-family: \"Press Start 2P\"; font-size: 14px; margin-bottom: 5px; color: #00ffff;'>PARAMS</div><div style='font-family: \"VT323\"; font-size: 35px; margin: 0; line-height: 1; color: #ffffff;'>{info}</div></div>", unsafe_allow_html=True)
+            c_m3.markdown(f"<div style='border:2px solid #00ffff; padding:10px; text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;'><div style='font-family: \"Press Start 2P\", cursive; font-size: 14px; margin-bottom: 5px; color: #00ffff;'>PARAMS</div><div style='font-family: \"VT323\", monospace; font-size: 35px; margin: 0; line-height: 1; color: #ffffff;'>{info}</div></div>", unsafe_allow_html=True)
 
             st.write("")
             fig, ax = plt.subplots(figsize=(14, 6), facecolor='black')
             ax.set_facecolor('black')
-            fig.patch.set_alpha(0) 
-            ax.patch.set_alpha(0)
             
             ax.plot(train.index[-60:], train.iloc[-60:], color='#777', label='TRAIN')
             ax.plot(test.index, test, color='#00ff41', linewidth=2.5, label='ACTUAL')
@@ -277,7 +279,7 @@ if btn_run or st.session_state.get('run_success', False):
             
             v1, v2, v3 = st.columns([1, 2, 1])
             with v2:
-                rivals_input = st.text_input("COMPARISION", value="AAPL, MSFT, GOOG", placeholder="EX: TSLA, AMZN")
+                rivals_input = st.text_input("ENTER RIVALS (MÃ ĐỐI THỦ)", value="AAPL, MSFT, GOOG", placeholder="EX: TSLA, AMZN")
                 st.write("")
                 btn_fight = st.button(">> START COMPARISON <<")
 
@@ -287,7 +289,6 @@ if btn_run or st.session_state.get('run_success', False):
                 results_map = {}
                 progress_bar = st.progress(0)
                 
-                # Vòng lặp so sánh an toàn
                 for i, t in enumerate(all_tickers):
                     try:
                         d_t = yf.download(t, period="2y", progress=False)
@@ -295,35 +296,22 @@ if btn_run or st.session_state.get('run_success', False):
                         if val is not None and not val.empty:
                             val = val.astype(float)
                             if val.index.tz is not None: val.index = val.index.tz_localize(None)
-                            
-                            # Resample cho khớp
                             if freq_val == "M": val = val.resample('M').last()
                             elif freq_val == "Q": val = val.resample('Q').last()
                             else: val = val.asfreq('B').fillna(method='ffill')
                             val = val.dropna()
-                            
-                            # Kiểm tra độ dài
                             if len(val) > test_size + window_size:
                                 _, pred_t, _ = get_forecast(val, model_display, test_size, window_size, seasonal_p)
                                 if not pred_t.isna().all(): results_map[t] = pred_t
-                            else:
-                                st.warning(f"⚠️ Mã {t} không đủ dữ liệu để so sánh.")
-                    except Exception as ex: 
-                        st.warning(f"⚠️ Lỗi tải mã {t}: {ex}")
-                    
+                    except Exception: pass
                     progress_bar.progress((i + 1) / len(all_tickers))
-                
                 progress_bar.empty()
 
                 if len(results_map) > 0:
                     st.markdown("<h4 style='text-align:center; font-family:VT323; margin-top:20px'>PREDICTED GROWTH (%) COMPARISON</h4>", unsafe_allow_html=True)
                     fig2, ax2 = plt.subplots(figsize=(14, 7), facecolor='black')
-                    fig2.patch.set_alpha(0)
                     ax2.set_facecolor('black')
-                    ax2.patch.set_alpha(0)
-                    
                     colors = ['#00ff41', '#ff00ff', '#00ffff', '#ffcc00', '#ff3333']
-                    
                     for idx, (t_name, pred_series) in enumerate(results_map.items()):
                         if len(pred_series) > 0:
                             start_val = pred_series.iloc[0]
@@ -333,14 +321,13 @@ if btn_run or st.session_state.get('run_success', False):
                                 ls = '-' if t_name == ticker else '--'
                                 color = colors[idx % len(colors)]
                                 ax2.plot(pred_series.index, pct_change, label=f"{t_name}", color=color, linewidth=lw, linestyle=ls)
-                    
                     ax2.set_ylabel("GROWTH %")
                     ax2.legend(facecolor='black', edgecolor='#333', labelcolor='#fff')
                     ax2.grid(color='#222', linestyle=':')
                     ax2.axhline(0, color='#555', linewidth=1)
                     for s in ax2.spines.values(): s.set_edgecolor('#333')
                     st.pyplot(fig2)
-                else: st.error("❌ Không thể vẽ biểu đồ so sánh (Không có dữ liệu hợp lệ).")
+                else: st.warning("No valid data found for comparison.")
 
     except Exception as e:
         st.error(f"SYSTEM ERROR: {e}")
@@ -353,6 +340,3 @@ else:
         </div>
         <style>@keyframes blinker { 50% { opacity: 0; } }</style>
     """, unsafe_allow_html=True)
-
-
-
