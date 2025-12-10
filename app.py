@@ -9,57 +9,90 @@ from scipy.optimize import minimize
 import warnings
 import time
 import base64
+import os # Thêm thư viện để kiểm tra file
 
 # ==============================================================================
-# 1. CẤU HÌNH & HÀM INTRO VIDEO (V3.1: VERTICAL VIDEO & NO BG)
+# 1. CẤU HÌNH & HÀM INTRO (V3.2: TỰ ĐỘNG BỎ QUA NẾU LỖI FILE)
 # ==============================================================================
 warnings.filterwarnings("ignore")
 st.set_page_config(page_title="PIXEL TRADER PRO", layout="wide", page_icon="📈")
 plt.style.use('dark_background')
 
-# --- HÀM 1: INTRO VIDEO (Đã đổi tên file thành 1210.mp4) ---
+# --- HÀM 1: INTRO VIDEO AN TOÀN ---
 def show_intro_video(video_file, duration=8):
+    # 1. Kiểm tra trạng thái session
     if 'intro_done' not in st.session_state:
         st.session_state['intro_done'] = False
 
-    if not st.session_state['intro_done']:
-        try:
-            with open(video_file, "rb") as f:
-                video_bytes = f.read()
-            video_str = base64.b64encode(video_bytes).decode()
-            
-            # CSS đè toàn màn hình màu đen
-            intro_html = f"""
-            <style>
-                .stApp {{ overflow: hidden; }}
-                #intro-overlay {{
-                    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-                    background-color: black; z-index: 999999;
-                    display: flex; justify-content: center; align-items: center;
-                }}
-                #intro-video {{ 
-                    width: 100%; height: 100%; 
-                    object-fit: cover; /* Tự động zoom video dọc cho kín màn hình */
-                }}
-            </style>
-            <div id="intro-overlay">
-                <video id="intro-video" autoplay muted playsinline>
-                    <source src="data:video/mp4;base64,{video_str}" type="video/mp4">
-                </video>
-            </div>
-            """
-            placeholder = st.empty()
-            placeholder.markdown(intro_html, unsafe_allow_html=True)
-            time.sleep(duration)
-            placeholder.empty()
-            st.session_state['intro_done'] = True
-            st.rerun()
-        except FileNotFoundError:
-            st.session_state['intro_done'] = True # Bỏ qua nếu không có file
+    # 2. Nếu đã chạy xong intro thì thôi, không làm gì cả
+    if st.session_state['intro_done']:
+        return
 
-# --- KÍCH HOẠT INTRO ---
-# Nhớ đảm bảo file 1210.mp4 nằm cùng thư mục với app.py
-show_intro_video("1210.mp4", duration=7) 
+    # 3. KIỂM TRA FILE CÓ TỒN TẠI KHÔNG?
+    if not os.path.exists(video_file):
+        # Nếu không thấy file, hiện thông báo nhỏ rồi vào app luôn
+        st.warning(f"⚠️ KHÔNG TÌM THẤY FILE VIDEO: '{video_file}'. Đang vào ứng dụng...")
+        time.sleep(2) # Đợi 2 giây cho người dùng đọc
+        st.session_state['intro_done'] = True
+        st.rerun()
+        return
+
+    # 4. Nếu có file thì chạy Intro
+    try:
+        with open(video_file, "rb") as f:
+            video_bytes = f.read()
+        
+        # Kiểm tra dung lượng (Nếu quá 15MB thì cảnh báo)
+        if len(video_bytes) > 15 * 1024 * 1024:
+            st.warning("⚠️ File video quá nặng (>15MB), có thể gây lag!")
+        
+        video_str = base64.b64encode(video_bytes).decode()
+        
+        intro_html = f"""
+        <style>
+            .stApp {{ overflow: hidden; }}
+            #intro-overlay {{
+                position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+                background-color: #000000; z-index: 999999;
+                display: flex; justify-content: center; align-items: center;
+                flex-direction: column;
+            }}
+            #intro-video {{ 
+                width: 100%; height: 100%; 
+                object-fit: cover; 
+            }}
+            /* Nút bỏ qua đề phòng video lỗi */
+            #skip-btn {{
+                position: absolute; bottom: 20px; right: 20px;
+                color: #00ff41; font-family: monospace; font-size: 20px;
+                z-index: 1000000; cursor: pointer; border: 1px solid #00ff41; padding: 10px;
+                background: black;
+            }}
+        </style>
+        
+        <div id="intro-overlay">
+            <video id="intro-video" autoplay muted playsinline>
+                <source src="data:video/mp4;base64,{video_str}" type="video/mp4">
+            </video>
+            <div id="skip-btn">LOADING SYSTEM...</div>
+        </div>
+        """
+        placeholder = st.empty()
+        placeholder.markdown(intro_html, unsafe_allow_html=True)
+        
+        time.sleep(duration) # Chờ video chạy
+        
+        placeholder.empty() # Xóa video
+        st.session_state['intro_done'] = True
+        st.rerun()
+
+    except Exception as e:
+        st.error(f"Lỗi khi đọc video: {e}")
+        st.session_state['intro_done'] = True
+
+# --- KÍCH HOẠT ---
+# Code sẽ tìm file '1210.mp4'. Nếu không thấy, nó sẽ tự bỏ qua.
+show_intro_video("1210.mp4", duration=7)
 
 
 # ==============================================================================
@@ -69,28 +102,23 @@ st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
 
-        /* ẨN MENU */
         header[data-testid="stHeader"] { visibility: hidden; }
         .block-container { padding-top: 2rem; }
 
-        /* MÀU CHỮ CHÍNH & NỀN ĐEN SÂU (Đã bỏ ảnh nền) */
         .stApp {
-            background-color: #0d0d0d; /* Nền đen chuẩn */
+            background-color: #0d0d0d; 
             color: #00ff41;
             font-family: 'VT323', monospace;
             font-size: 20px;
         }
         
-        /* INPUTS CHỮ TRẮNG */
         input { color: #ffffff !important; font-family: 'VT323', monospace !important; font-size: 22px !important; }
         div[data-baseweb="select"] > div { background-color: #000 !important; color: #ffffff !important; border-color: #00ff41 !important; }
         div[data-baseweb="input"] > div { background-color: #000 !important; border: 2px solid #00ff41 !important; border-radius: 0px; }
         div[data-baseweb="select"] svg { fill: #00ff41 !important; }
 
-        /* TEXT STYLES */
         label p { font-size: 18px !important; font-family: 'Press Start 2P', cursive !important; color: #00ff41 !important; }
         
-        /* TIÊU ĐỀ TO */
         h1 {
             font-family: 'Press Start 2P', cursive !important;
             text-align: center; color: #00ff41;
@@ -100,7 +128,6 @@ st.markdown("""
         }
         .sub-title { text-align: center; font-family: 'VT323'; font-size: 24px; color: #555; letter-spacing: 4px; margin-bottom: 30px; }
 
-        /* NÚT BẤM (SIMPLE BLACK & GREEN - NO WHITE FLASH) */
         div.stButton > button {
             width: 100%;
             background-color: #000000 !important;
@@ -178,12 +205,10 @@ def clean_yfinance_data(df):
 # 4. GIAO DIỆN CHÍNH
 # ==============================================================================
 
-# Reset VS Mode
 if 'vs_mode' not in st.session_state: st.session_state.vs_mode = False
 
-# TIÊU ĐỀ KHỔNG LỒ
 st.markdown("<h1>PIXEL TRADER</h1>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>ULTIMATE EDITION [v3.1]</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>PRO EDITION [v3.2]</div>", unsafe_allow_html=True)
 
 with st.container():
     c1, c2, c3 = st.columns([1, 3, 1]) 
@@ -248,6 +273,8 @@ if btn_run or st.session_state.get('run_success', False):
             st.write("")
             fig, ax = plt.subplots(figsize=(14, 6), facecolor='black')
             ax.set_facecolor('black')
+            fig.patch.set_alpha(0) 
+            ax.patch.set_alpha(0)
             
             ax.plot(train.index[-60:], train.iloc[-60:], color='#777', label='TRAIN')
             ax.plot(test.index, test, color='#00ff41', linewidth=2.5, label='ACTUAL')
@@ -293,7 +320,9 @@ if btn_run or st.session_state.get('run_success', False):
                 if len(results_map) > 0:
                     st.markdown("<h4 style='text-align:center; font-family:VT323; margin-top:20px'>PREDICTED GROWTH (%) COMPARISON</h4>", unsafe_allow_html=True)
                     fig2, ax2 = plt.subplots(figsize=(14, 7), facecolor='black')
+                    fig2.patch.set_alpha(0)
                     ax2.set_facecolor('black')
+                    ax2.patch.set_alpha(0)
                     colors = ['#00ff41', '#ff00ff', '#00ffff', '#ffcc00', '#ff3333']
                     for idx, (t_name, pred_series) in enumerate(results_map.items()):
                         if len(pred_series) > 0:
