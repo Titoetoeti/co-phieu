@@ -199,7 +199,7 @@ def clean_yfinance_data(df):
 if 'vs_mode' not in st.session_state: st.session_state.vs_mode = False
 
 st.markdown("<h1>STOCKS FORECAST</h1>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>MADE BY NHÓM 4 CÔNG/KHÁNH/HGB [v3.5]</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>MADE BY NHÓM 4 CÔNG/KHÁNH [v3.5]</div>", unsafe_allow_html=True)
 
 with st.container():
     c1, c2, c3 = st.columns([1, 3, 1]) 
@@ -340,5 +340,6 @@ else:
         </div>
         <style>@keyframes blinker { 50% { opacity: 0; } }</style>
     """, unsafe_allow_html=True)
+
 
 
