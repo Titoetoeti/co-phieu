@@ -15,7 +15,7 @@ import os
 # 1. CẤU HÌNH & HÀM HỖ TRỢ (V3.4: UPDATE VIDEO NAME -> intro.mp4)
 # ==============================================================================
 warnings.filterwarnings("ignore")
-st.set_page_config(page_title="PIXEL TRADER PRO", layout="wide", page_icon="📈")
+st.set_page_config(page_title="TRADER PRO", layout="wide", page_icon="")
 plt.style.use('dark_background')
 
 # --- HÀM 1: INTRO VIDEO ---
@@ -194,16 +194,16 @@ def clean_yfinance_data(df):
 
 if 'vs_mode' not in st.session_state: st.session_state.vs_mode = False
 
-st.markdown("<h1>PIXEL TRADER</h1>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>ULTIMATE EDITION [v3.4]</div>", unsafe_allow_html=True)
+st.markdown("<h1>STOCK FORECASTING SYSTEM</h1>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'> MADE BY CONG AND KHANH (FEAT BAO)  [v3.4]</div>", unsafe_allow_html=True)
 
 with st.container():
     c1, c2, c3 = st.columns([1, 3, 1]) 
     with c2:
-        ticker = st.text_input("PLAYER 1 (MÃ CHÍNH)", value="META", placeholder="EX: AAPL").upper()
+        ticker = st.text_input("MAIN CODE", value="META", placeholder="EX: AAPL").upper()
         col_inp1, col_inp2 = st.columns(2)
         with col_inp1: freq_display = st.selectbox("TIMEFRAME", ("DAILY", "MONTHLY", "QUARTERLY"))
-        with col_inp2: model_display = st.selectbox("WEAPON (MODEL)", ("Naive", "Moving Average", "SES", "Holt", "Holt-Winters"))
+        with col_inp2: model_display = st.selectbox("MODEL", ("Naive", "Moving Average", "SES", "Holt", "Holt-Winters"))
         with st.expander("⚙️ ADVANCED SETTINGS"):
             window_size = 3
             if model_display == "Moving Average": window_size = st.slider("WINDOW SIZE", 2, 50, 3)
@@ -353,3 +353,4 @@ else:
         </div>
         <style>@keyframes blinker { 50% { opacity: 0; } }</style>
     """, unsafe_allow_html=True)
+
