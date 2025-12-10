@@ -12,13 +12,13 @@ import base64
 import os
 
 # ==============================================================================
-# 1. CẤU HÌNH & HÀM HỖ TRỢ (V3.5: UPDATE VIDEO NAME -> intro1.mp4)
+# 1. CẤU HÌNH & HÀM HỖ TRỢ (GIỮ NGUYÊN)
 # ==============================================================================
 warnings.filterwarnings("ignore")
 st.set_page_config(page_title="PIXEL TRADER PRO", layout="wide", page_icon="📈")
 plt.style.use('dark_background')
 
-# --- HÀM 1: INTRO VIDEO ---
+# --- HÀM INTRO VIDEO ---
 def show_intro_video(video_file, duration=8):
     if 'intro_done' not in st.session_state:
         st.session_state['intro_done'] = False
@@ -26,7 +26,6 @@ def show_intro_video(video_file, duration=8):
     if st.session_state['intro_done']:
         return
 
-    # Kiểm tra file tồn tại
     if not os.path.exists(video_file):
         st.warning(f"⚠️ KHÔNG TÌM THẤY FILE: '{video_file}'. Bỏ qua intro...")
         time.sleep(1)
@@ -78,12 +77,12 @@ def show_intro_video(video_file, duration=8):
         st.error(f"Lỗi Intro: {e}")
         st.session_state['intro_done'] = True
 
-# --- GỌI INTRO (ĐÃ SỬA THÀNH intro1.mp4) ---
+# Gọi Intro
 show_intro_video("intro1.mp4", duration=7)
 
 
 # ==============================================================================
-# 2. CSS GIAO DIỆN (PIXEL STYLE - GIỮ NGUYÊN)
+# 2. CSS GIAO DIỆN (PIXEL STYLE FINAL - GIỮ NGUYÊN)
 # ==============================================================================
 st.markdown("""
     <style>
@@ -99,16 +98,13 @@ st.markdown("""
             font-size: 20px;
         }
         
-        /* INPUTS CHỮ TRẮNG */
         input { color: #ffffff !important; font-family: 'VT323', monospace !important; font-size: 22px !important; }
         div[data-baseweb="select"] > div { background-color: #000 !important; color: #ffffff !important; border-color: #00ff41 !important; }
         div[data-baseweb="input"] > div { background-color: #000 !important; border: 2px solid #00ff41 !important; border-radius: 0px; }
         div[data-baseweb="select"] svg { fill: #00ff41 !important; }
 
-        /* TEXT STYLES */
         label p { font-size: 18px !important; font-family: 'Press Start 2P', cursive !important; color: #00ff41 !important; }
         
-        /* TIÊU ĐỀ KHỔNG LỒ */
         h1 {
             font-family: 'Press Start 2P', cursive !important;
             text-align: center; color: #00ff41;
@@ -118,7 +114,6 @@ st.markdown("""
         }
         .sub-title { text-align: center; font-family: 'VT323'; font-size: 24px; color: #555; letter-spacing: 4px; margin-bottom: 30px; }
 
-        /* NÚT BẤM ĐEN XANH */
         div.stButton > button {
             width: 100%;
             background-color: #000000 !important;
@@ -140,51 +135,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 3. LOGIC TÍNH TOÁN (GIỮ NGUYÊN)
+# 3. LOGIC TÍNH TOÁN (CẬP NHẬT MỚI V4.0)
 # ==============================================================================
-def find_optimal_params(train_data, model_type, seasonal_periods=None):
-    bounds_limit = (0.01, 0.99)
-    def loss_function(params):
-        try:
-            if model_type == 'SES':
-                model = SimpleExpSmoothing(train_data).fit(smoothing_level=params[0], optimized=False)
-            elif model_type == 'Holt':
-                model = ExponentialSmoothing(train_data, trend='add').fit(
-                    smoothing_level=params[0], smoothing_trend=params[1], optimized=False)
-            elif model_type == 'HW':
-                model = ExponentialSmoothing(train_data, trend='add', seasonal='add', seasonal_periods=seasonal_periods).fit(
-                    smoothing_level=params[0], smoothing_trend=params[1], smoothing_seasonal=params[2], optimized=False)
-            return np.sqrt(mean_squared_error(train_data, model.fittedvalues))
-        except: return 1e10
 
-    if model_type == 'SES': init, bnds = [0.5], [bounds_limit]
-    elif model_type == 'Holt': init, bnds = [0.5, 0.1], [bounds_limit]*2
-    elif model_type == 'HW': init, bnds = [0.5, 0.1, 0.1], [bounds_limit]*3
-    else: return []
-
-    res = minimize(loss_function, init, bounds=bnds, method='L-BFGS-B')
-    return res.x
-
-def get_forecast(data, model_type, test_size, window_size, seasonal_p):
-    train, test = data.iloc[:-test_size], data.iloc[-test_size:]
-    preds = pd.Series(index=test.index, dtype='float64')
-    info = ""
-    try:
-        if model_type == "Naive": preds[:] = np.array([train.iloc[-1]] * len(test)); info = "NAIVE"
-        elif model_type == "Moving Average": 
-            preds = data.rolling(window_size).mean().shift(1).loc[test.index]; info = f"MA({window_size})"
-        elif model_type == "SES":
-            p = find_optimal_params(train, 'SES')
-            preds = SimpleExpSmoothing(train).fit(smoothing_level=p[0], optimized=False).forecast(len(test)); info = f"α:{p[0]:.2f}"
-        elif model_type == "Holt":
-            p = find_optimal_params(train, 'Holt')
-            preds = ExponentialSmoothing(train, trend='add').fit(smoothing_level=p[0], smoothing_trend=p[1], optimized=False).forecast(len(test)); info = f"α:{p[0]:.2f}"
-        elif model_type == "Holt-Winters":
-            p = find_optimal_params(train, 'HW', seasonal_p)
-            preds = ExponentialSmoothing(train, trend='add', seasonal='add', seasonal_periods=seasonal_p).fit(smoothing_level=p[0], smoothing_trend=p[1], smoothing_seasonal=p[2], optimized=False).forecast(len(test)); info = f"HW"
-    except: preds[:] = np.nan
-    return test, preds, info
-
+# Hàm làm sạch dữ liệu
 def clean_yfinance_data(df):
     if df.empty: return None
     if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
@@ -192,22 +146,112 @@ def clean_yfinance_data(df):
     col = next((c for c in ['adj close', 'close', 'price'] if c in df.columns), df.columns[0])
     return df[col]
 
+# Hàm tính toán mô hình và dự báo
+def get_forecast(full_data, model_type, test_size, window_size, seasonal_p, freq_val):
+    # Chia train/test
+    train = full_data.iloc[:-test_size]
+    test = full_data.iloc[-test_size:]
+    
+    preds = pd.Series(index=test.index, dtype='float64')
+    info = ""
+    warning = None
+
+    try:
+        # --- MODEL 1: NAIVE ---
+        if model_type == "Naive": 
+            preds[:] = np.array([train.iloc[-1]] * len(test))
+            info = "NAIVE"
+
+        # --- MODEL 2: MOVING AVERAGE (SỬA LỖI LOGIC ROLLING) ---
+        elif model_type == "Moving Average": 
+            # Logic mới: Tính Rolling trên TOÀN BỘ dữ liệu, sau đó mới cắt phần Test
+            # Shift(1) đảm bảo dự báo tại thời điểm t chỉ dùng dữ liệu t-1 trở về trước
+            rolling_series = full_data.rolling(window=window_size).mean().shift(1)
+            preds = rolling_series.loc[test.index]
+            info = f"MA({window_size})"
+
+        # --- MODEL 3: SES (Simple Exponential Smoothing) ---
+        elif model_type == "SES":
+            # Tối ưu hóa Alpha
+            def ses_loss(params):
+                mdl = SimpleExpSmoothing(train).fit(smoothing_level=params[0], optimized=False)
+                return mean_squared_error(train, mdl.fittedvalues)
+            
+            res = minimize(ses_loss, [0.5], bounds=[(0.01, 0.99)], method='L-BFGS-B')
+            alpha_opt = res.x[0]
+            
+            # Fit và Forecast
+            model = SimpleExpSmoothing(train).fit(smoothing_level=alpha_opt, optimized=False)
+            preds = model.forecast(len(test))
+            info = f"α:{alpha_opt:.2f}"
+
+        # --- MODEL 4: HOLT'S LINEAR ---
+        elif model_type == "Holt":
+            # Tối ưu hóa Alpha, Beta
+            def holt_loss(params):
+                mdl = ExponentialSmoothing(train, trend='add').fit(
+                    smoothing_level=params[0], smoothing_trend=params[1], optimized=False)
+                return mean_squared_error(train, mdl.fittedvalues)
+            
+            res = minimize(holt_loss, [0.5, 0.1], bounds=[(0.01, 0.99), (0.01, 0.99)], method='L-BFGS-B')
+            alpha_opt, beta_opt = res.x
+            
+            model = ExponentialSmoothing(train, trend='add').fit(
+                smoothing_level=alpha_opt, smoothing_trend=beta_opt, optimized=False)
+            preds = model.forecast(len(test))
+            info = f"α:{alpha_opt:.2f} β:{beta_opt:.2f}"
+
+        # --- MODEL 5: HOLT-WINTERS (SỬA LỖI & THÊM CẢNH BÁO) ---
+        elif model_type == "Holt-Winters":
+            # 1. Cảnh báo nếu dùng cho Daily
+            if freq_val == 'D' or seasonal_p > 12: 
+                warning = "Mô hình có thể không phù hợp để dự báo (Daily Data)"
+            
+            # 2. Tối ưu hóa Alpha, Beta, Gamma
+            def hw_loss(params):
+                try:
+                    mdl = ExponentialSmoothing(train, trend='add', seasonal='add', seasonal_periods=seasonal_p).fit(
+                        smoothing_level=params[0], smoothing_trend=params[1], smoothing_seasonal=params[2], optimized=False)
+                    return mean_squared_error(train, mdl.fittedvalues)
+                except: return 1e10 # Return large error if model fails
+
+            # Giá trị khởi tạo [alpha, beta, gamma]
+            initial_guess = [0.3, 0.1, 0.1]
+            bounds = [(0.01, 0.99), (0.01, 0.99), (0.01, 0.99)]
+            
+            res = minimize(hw_loss, initial_guess, bounds=bounds, method='L-BFGS-B')
+            alpha_opt, beta_opt, gamma_opt = res.x
+            
+            # Fit mô hình với tham số tối ưu
+            model = ExponentialSmoothing(train, trend='add', seasonal='add', seasonal_periods=seasonal_p).fit(
+                smoothing_level=alpha_opt, smoothing_trend=beta_opt, smoothing_seasonal=gamma_opt, optimized=False)
+            
+            preds = model.forecast(len(test))
+            # Hiển thị đủ 3 chỉ số
+            info = f"α:{alpha_opt:.2f} β:{beta_opt:.2f} γ:{gamma_opt:.2f}"
+
+    except Exception as e:
+        preds[:] = np.nan
+        info = "ERROR"
+        
+    return train, test, preds, info, warning
+
 # ==============================================================================
 # 4. GIAO DIỆN CHÍNH
 # ==============================================================================
 
 if 'vs_mode' not in st.session_state: st.session_state.vs_mode = False
 
-st.markdown("<h1>STOCKS FORECAST</h1>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>MADE BY NHÓM 4 CÔNG/KHÁNH [v3.5]</div>", unsafe_allow_html=True)
+st.markdown("<h1>PIXEL TRADER</h1>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>ULTIMATE EDITION [v4.0]</div>", unsafe_allow_html=True)
 
 with st.container():
     c1, c2, c3 = st.columns([1, 3, 1]) 
     with c2:
-        ticker = st.text_input("CODE", value="META", placeholder="EX: AAPL").upper()
+        ticker = st.text_input("PLAYER 1 (MÃ CHÍNH)", value="META", placeholder="EX: AAPL").upper()
         col_inp1, col_inp2 = st.columns(2)
         with col_inp1: freq_display = st.selectbox("TIMEFRAME", ("DAILY", "MONTHLY", "QUARTERLY"))
-        with col_inp2: model_display = st.selectbox("MODEL", ("Naive", "Moving Average", "SES", "Holt", "Holt-Winters"))
+        with col_inp2: model_display = st.selectbox("WEAPON (MODEL)", ("Naive", "Moving Average", "SES", "Holt", "Holt-Winters"))
         with st.expander("⚙️ ADVANCED SETTINGS"):
             window_size = 3
             if model_display == "Moving Average": window_size = st.slider("WINDOW SIZE", 2, 50, 3)
@@ -236,20 +280,35 @@ if btn_run or st.session_state.get('run_success', False):
             if data is None: st.error("❌ DATA NOT FOUND."); st.stop()
             data = data.astype(float)
             if data.index.tz is not None: data.index = data.index.tz_localize(None)
-            if freq_val == "M": data = data.resample('M').last(); seasonal_p = 12
-            elif freq_val == "Q": data = data.resample('Q').last(); seasonal_p = 4
-            else: data = data.asfreq('B').fillna(method='ffill'); seasonal_p = 5
+            
+            # Resample & Seasonality Logic
+            seasonal_p = 5 # Default for Daily
+            if freq_val == "M": 
+                data = data.resample('M').last()
+                seasonal_p = 12
+            elif freq_val == "Q": 
+                data = data.resample('Q').last()
+                seasonal_p = 4
+            else: 
+                data = data.asfreq('B').fillna(method='ffill')
+                seasonal_p = 5 # Weekly seasonality for daily data
+            
             data = data.dropna()
             if len(data) < test_size + 10: st.error("⚠️ DATA TOO SHORT."); st.stop()
 
-            test, preds, info = get_forecast(data, model_display, test_size, window_size, seasonal_p)
-            train = data.iloc[:-test_size]
+            # GỌI HÀM DỰ BÁO (Đã cập nhật logic)
+            train, test, preds, info, warning_msg = get_forecast(data, model_display, test_size, window_size, seasonal_p, freq_val)
 
+            # Metrics
             mask = ~np.isnan(preds) & ~np.isnan(test)
             rmse = np.sqrt(mean_squared_error(test[mask], preds[mask])) if mask.sum() > 0 else 0
             mape = mean_absolute_percentage_error(test[mask], preds[mask]) * 100 if mask.sum() > 0 else 0
 
-            # METRICS DISPLAY (STYLING AS REQUESTED)
+            # HIỂN THỊ CẢNH BÁO (Nếu có)
+            if warning_msg:
+                st.warning(f"⚠️ {warning_msg}")
+
+            # HIỂN THỊ METRICS
             st.markdown(f"<div style='text-align:center; font-family:\"Press Start 2P\"; color:#00ff41; margin-bottom:10px'>TARGET: {ticker}</div>", unsafe_allow_html=True)
             c_m1, c_m2, c_m3 = st.columns(3)
             
@@ -264,6 +323,8 @@ if btn_run or st.session_state.get('run_success', False):
             st.write("")
             fig, ax = plt.subplots(figsize=(14, 6), facecolor='black')
             ax.set_facecolor('black')
+            fig.patch.set_alpha(0) 
+            ax.patch.set_alpha(0)
             
             ax.plot(train.index[-60:], train.iloc[-60:], color='#777', label='TRAIN')
             ax.plot(test.index, test, color='#00ff41', linewidth=2.5, label='ACTUAL')
@@ -275,11 +336,11 @@ if btn_run or st.session_state.get('run_success', False):
 
             # --- VS MODE ---
             st.markdown("---")
-            st.markdown("<h3 style='text-align:center; color:#ffcc00; font-family:\"Press Start 2P\"'>COMPARISON MODE</h3>", unsafe_allow_html=True)
+            st.markdown("<h3 style='text-align:center; color:#ffcc00; font-family:\"Press Start 2P\"'>VS MODE ACTIVATED</h3>", unsafe_allow_html=True)
             
             v1, v2, v3 = st.columns([1, 2, 1])
             with v2:
-                rivals_input = st.text_input("ENTER RIVALS CODE", value="AAPL, MSFT, GOOG", placeholder="EX: TSLA, AMZN")
+                rivals_input = st.text_input("ENTER RIVALS (MÃ ĐỐI THỦ)", value="AAPL, MSFT, GOOG", placeholder="EX: TSLA, AMZN")
                 st.write("")
                 btn_fight = st.button(">> START COMPARISON <<")
 
@@ -296,12 +357,15 @@ if btn_run or st.session_state.get('run_success', False):
                         if val is not None and not val.empty:
                             val = val.astype(float)
                             if val.index.tz is not None: val.index = val.index.tz_localize(None)
+                            
                             if freq_val == "M": val = val.resample('M').last()
                             elif freq_val == "Q": val = val.resample('Q').last()
                             else: val = val.asfreq('B').fillna(method='ffill')
                             val = val.dropna()
+                            
                             if len(val) > test_size + window_size:
-                                _, pred_t, _ = get_forecast(val, model_display, test_size, window_size, seasonal_p)
+                                # Sử dụng hàm get_forecast mới cho cả phần so sánh
+                                _, _, pred_t, _, _ = get_forecast(val, model_display, test_size, window_size, seasonal_p, freq_val)
                                 if not pred_t.isna().all(): results_map[t] = pred_t
                     except Exception: pass
                     progress_bar.progress((i + 1) / len(all_tickers))
@@ -310,7 +374,9 @@ if btn_run or st.session_state.get('run_success', False):
                 if len(results_map) > 0:
                     st.markdown("<h4 style='text-align:center; font-family:VT323; margin-top:20px'>PREDICTED GROWTH (%) COMPARISON</h4>", unsafe_allow_html=True)
                     fig2, ax2 = plt.subplots(figsize=(14, 7), facecolor='black')
+                    fig2.patch.set_alpha(0)
                     ax2.set_facecolor('black')
+                    ax2.patch.set_alpha(0)
                     colors = ['#00ff41', '#ff00ff', '#00ffff', '#ffcc00', '#ff3333']
                     for idx, (t_name, pred_series) in enumerate(results_map.items()):
                         if len(pred_series) > 0:
@@ -340,6 +406,3 @@ else:
         </div>
         <style>@keyframes blinker { 50% { opacity: 0; } }</style>
     """, unsafe_allow_html=True)
-
-
-
