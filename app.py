@@ -9,43 +9,39 @@ from scipy.optimize import minimize
 import warnings
 import time
 import base64
-import os # Thêm thư viện để kiểm tra file
+import os
 
 # ==============================================================================
-# 1. CẤU HÌNH & HÀM INTRO (V3.2: TỰ ĐỘNG BỎ QUA NẾU LỖI FILE)
+# 1. CẤU HÌNH & HÀM HỖ TRỢ (V3.3: FIX VIDEO NAME & CHART ERROR)
 # ==============================================================================
 warnings.filterwarnings("ignore")
 st.set_page_config(page_title="PIXEL TRADER PRO", layout="wide", page_icon="📈")
 plt.style.use('dark_background')
 
-# --- HÀM 1: INTRO VIDEO AN TOÀN ---
+# --- HÀM 1: INTRO VIDEO (CẬP NHẬT TÊN FILE 1210(1).mp4) ---
 def show_intro_video(video_file, duration=8):
-    # 1. Kiểm tra trạng thái session
     if 'intro_done' not in st.session_state:
         st.session_state['intro_done'] = False
 
-    # 2. Nếu đã chạy xong intro thì thôi, không làm gì cả
     if st.session_state['intro_done']:
         return
 
-    # 3. KIỂM TRA FILE CÓ TỒN TẠI KHÔNG?
+    # Kiểm tra file tồn tại
     if not os.path.exists(video_file):
-        # Nếu không thấy file, hiện thông báo nhỏ rồi vào app luôn
-        st.warning(f"⚠️ KHÔNG TÌM THẤY FILE VIDEO: '{video_file}'. Đang vào ứng dụng...")
-        time.sleep(2) # Đợi 2 giây cho người dùng đọc
+        # Thử tìm file gốc nếu tên file có ký tự đặc biệt bị lỗi
+        st.warning(f"⚠️ KHÔNG TÌM THẤY FILE: '{video_file}'. Bỏ qua intro...")
+        time.sleep(1)
         st.session_state['intro_done'] = True
         st.rerun()
         return
 
-    # 4. Nếu có file thì chạy Intro
     try:
         with open(video_file, "rb") as f:
             video_bytes = f.read()
         
-        # Kiểm tra dung lượng (Nếu quá 15MB thì cảnh báo)
-        if len(video_bytes) > 15 * 1024 * 1024:
-            st.warning("⚠️ File video quá nặng (>15MB), có thể gây lag!")
-        
+        if len(video_bytes) > 20 * 1024 * 1024:
+            st.warning("⚠️ Video > 20MB, có thể gây chậm.")
+
         video_str = base64.b64encode(video_bytes).decode()
         
         intro_html = f"""
@@ -57,42 +53,34 @@ def show_intro_video(video_file, duration=8):
                 display: flex; justify-content: center; align-items: center;
                 flex-direction: column;
             }}
-            #intro-video {{ 
-                width: 100%; height: 100%; 
-                object-fit: cover; 
-            }}
-            /* Nút bỏ qua đề phòng video lỗi */
+            #intro-video {{ width: 100%; height: 100%; object-fit: cover; }}
             #skip-btn {{
-                position: absolute; bottom: 20px; right: 20px;
-                color: #00ff41; font-family: monospace; font-size: 20px;
-                z-index: 1000000; cursor: pointer; border: 1px solid #00ff41; padding: 10px;
-                background: black;
+                position: absolute; bottom: 30px; right: 30px;
+                color: #00ff41; font-family: monospace; font-size: 16px;
+                z-index: 1000000; border: 1px solid #00ff41; padding: 10px;
+                background: black; opacity: 0.8;
             }}
         </style>
-        
         <div id="intro-overlay">
             <video id="intro-video" autoplay muted playsinline>
                 <source src="data:video/mp4;base64,{video_str}" type="video/mp4">
             </video>
-            <div id="skip-btn">LOADING SYSTEM...</div>
+            <div id="skip-btn">SYSTEM INITIALIZING...</div>
         </div>
         """
         placeholder = st.empty()
         placeholder.markdown(intro_html, unsafe_allow_html=True)
-        
-        time.sleep(duration) # Chờ video chạy
-        
-        placeholder.empty() # Xóa video
+        time.sleep(duration)
+        placeholder.empty()
         st.session_state['intro_done'] = True
         st.rerun()
 
     except Exception as e:
-        st.error(f"Lỗi khi đọc video: {e}")
+        st.error(f"Lỗi Intro: {e}")
         st.session_state['intro_done'] = True
 
-# --- KÍCH HOẠT ---
-# Code sẽ tìm file '1210.mp4'. Nếu không thấy, nó sẽ tự bỏ qua.
-show_intro_video("1210.mp4", duration=7)
+# --- GỌI INTRO (FILE MỚI) ---
+show_intro_video("1210(1).mp4", duration=7)
 
 
 # ==============================================================================
@@ -208,7 +196,7 @@ def clean_yfinance_data(df):
 if 'vs_mode' not in st.session_state: st.session_state.vs_mode = False
 
 st.markdown("<h1>PIXEL TRADER</h1>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>PRO EDITION [v3.2]</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>ULTIMATE EDITION [v3.3]</div>", unsafe_allow_html=True)
 
 with st.container():
     c1, c2, c3 = st.columns([1, 3, 1]) 
@@ -300,21 +288,32 @@ if btn_run or st.session_state.get('run_success', False):
                 results_map = {}
                 progress_bar = st.progress(0)
                 
+                # SỬA LỖI: Thêm try-except và kiểm tra kỹ trong vòng lặp so sánh
                 for i, t in enumerate(all_tickers):
                     try:
                         d_t = yf.download(t, period="2y", progress=False)
                         val = clean_yfinance_data(d_t)
-                        if val is not None:
+                        if val is not None and not val.empty:
                             val = val.astype(float)
                             if val.index.tz is not None: val.index = val.index.tz_localize(None)
+                            
+                            # Resample cho khớp
                             if freq_val == "M": val = val.resample('M').last()
                             elif freq_val == "Q": val = val.resample('Q').last()
                             else: val = val.asfreq('B').fillna(method='ffill')
                             val = val.dropna()
-                            _, pred_t, _ = get_forecast(val, model_display, test_size, window_size, seasonal_p)
-                            if not pred_t.isna().all(): results_map[t] = pred_t
-                    except: pass
+                            
+                            # Kiểm tra độ dài
+                            if len(val) > test_size + window_size:
+                                _, pred_t, _ = get_forecast(val, model_display, test_size, window_size, seasonal_p)
+                                if not pred_t.isna().all(): results_map[t] = pred_t
+                            else:
+                                st.warning(f"⚠️ Mã {t} không đủ dữ liệu để so sánh.")
+                    except Exception as ex: 
+                        st.warning(f"⚠️ Lỗi tải mã {t}: {ex}")
+                    
                     progress_bar.progress((i + 1) / len(all_tickers))
+                
                 progress_bar.empty()
 
                 if len(results_map) > 0:
@@ -323,23 +322,30 @@ if btn_run or st.session_state.get('run_success', False):
                     fig2.patch.set_alpha(0)
                     ax2.set_facecolor('black')
                     ax2.patch.set_alpha(0)
+                    
                     colors = ['#00ff41', '#ff00ff', '#00ffff', '#ffcc00', '#ff3333']
+                    
                     for idx, (t_name, pred_series) in enumerate(results_map.items()):
+                        # Tính % tăng trưởng an toàn
                         if len(pred_series) > 0:
                             start_val = pred_series.iloc[0]
-                            if start_val != 0:
+                            # Tránh chia cho 0 hoặc NaN
+                            if not np.isnan(start_val) and start_val != 0:
                                 pct_change = ((pred_series - start_val) / start_val) * 100
+                                
                                 lw = 3 if t_name == ticker else 2
                                 ls = '-' if t_name == ticker else '--'
                                 color = colors[idx % len(colors)]
+                                
                                 ax2.plot(pred_series.index, pct_change, label=f"{t_name}", color=color, linewidth=lw, linestyle=ls)
+                    
                     ax2.set_ylabel("GROWTH %")
                     ax2.legend(facecolor='black', edgecolor='#333', labelcolor='#fff')
                     ax2.grid(color='#222', linestyle=':')
                     ax2.axhline(0, color='#555', linewidth=1)
                     for s in ax2.spines.values(): s.set_edgecolor('#333')
                     st.pyplot(fig2)
-                else: st.warning("No valid data found for comparison.")
+                else: st.error("❌ Không thể vẽ biểu đồ so sánh (Không có dữ liệu hợp lệ).")
 
     except Exception as e:
         st.error(f"SYSTEM ERROR: {e}")
