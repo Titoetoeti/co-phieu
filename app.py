@@ -11,16 +11,16 @@ import warnings
 import time
 import base64
 import os
-import gc # Thư viện dọn rác bộ nhớ
+import gc
 
 # ==============================================================================
 # 1. CẤU HÌNH GIAO DIỆN
 # ==============================================================================
 warnings.filterwarnings("ignore")
-st.set_page_config(page_title="PIXEL TRADER (COLAB CORE)", layout="wide", page_icon="🧪")
+st.set_page_config(page_title="PIXEL TRADER (FINAL)", layout="wide", page_icon="📈")
 plt.style.use('dark_background') 
 
-# --- HÀM INTRO VIDEO (ĐÃ ĐƯỢC TỐI ƯU BỘ NHỚ) ---
+# --- HÀM INTRO VIDEO (ĐÃ TỐI ƯU) ---
 def show_intro_video(video_file, duration=8):
     if 'intro_done' not in st.session_state:
         st.session_state['intro_done'] = False
@@ -33,12 +33,10 @@ def show_intro_video(video_file, duration=8):
         return
 
     try:
-        # Đọc file video
         with open(video_file, "rb") as f:
             video_bytes = f.read()
         video_str = base64.b64encode(video_bytes).decode()
         
-        # Hiển thị
         intro_placeholder = st.empty()
         intro_placeholder.markdown(
             f"""
@@ -60,22 +58,16 @@ def show_intro_video(video_file, duration=8):
             """, 
             unsafe_allow_html=True
         )
-        
         time.sleep(duration)
         intro_placeholder.empty()
         st.session_state['intro_done'] = True
-        
-        # [QUAN TRỌNG] Xóa dữ liệu video khỏi RAM ngay lập tức
-        del video_bytes
-        del video_str
+        del video_bytes, video_str
         gc.collect() 
-        
         st.rerun()
 
     except Exception:
         st.session_state['intro_done'] = True
 
-# CHẠY INTRO
 show_intro_video("intro1.mp4", duration=6)
 
 # --- CSS TÙY CHỈNH ---
@@ -94,16 +86,16 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. HÀM TỐI ƯU HÓA (CORE TỪ COLAB)
+# 2. HÀM TỐI ƯU HÓA & LOGIC (ĐÃ FIX LỖI HOLT)
 # ==============================================================================
-# Hàm này dùng thuật toán L-BFGS-B để tìm tham số 'ngon' nhất
 def optimize_params(data, model_type, seasonal_periods=None):
     def loss_func(params):
         try:
             if model_type == 'SES':
                 model = SimpleExpSmoothing(data).fit(smoothing_level=params[0], optimized=False)
             elif model_type == 'Holt':
-                model = ExponentialSmoothing(data, trend='add', seasonal=None, damped_trend=True).fit(
+                # [FIX] Đã tắt damped_trend=False để khớp với 2 tham số
+                model = ExponentialSmoothing(data, trend='add', seasonal=None, damped_trend=False).fit(
                     smoothing_level=params[0], smoothing_trend=params[1], optimized=False)
             elif model_type == 'HW':
                 model = ExponentialSmoothing(data, trend='add', seasonal='add', seasonal_periods=seasonal_periods).fit(
@@ -165,49 +157,68 @@ def get_forecast(data, model_type, test_size, window_size, future_steps, freq_st
             info = f"MA({window_size})"
 
         elif model_type == "SES":
-            best_alpha = optimize_params(train, 'SES')[0]
-            model = SimpleExpSmoothing(train).fit(smoothing_level=best_alpha, optimized=False)
+            try:
+                best_alpha = optimize_params(train, 'SES')[0]
+                model = SimpleExpSmoothing(train).fit(smoothing_level=best_alpha, optimized=False)
+                if future_steps > 0:
+                    best_alpha_full = optimize_params(data, 'SES')[0]
+                    model_full = SimpleExpSmoothing(data).fit(smoothing_level=best_alpha_full, optimized=False)
+            except: # Fallback tự động
+                model = SimpleExpSmoothing(train).fit(optimized=True)
+                if future_steps > 0: model_full = SimpleExpSmoothing(data).fit(optimized=True)
+                best_alpha = model.params.get('smoothing_level', 0.5)
+
             preds[:] = model.forecast(len(test)).values
             if future_steps > 0:
-                best_alpha_full = optimize_params(data, 'SES')[0]
-                model_full = SimpleExpSmoothing(data).fit(smoothing_level=best_alpha_full, optimized=False)
                 dates = pd.date_range(start=data.index[-1], periods=future_steps+1, freq=data.index.freq)[1:]
                 future_series = pd.Series(model_full.forecast(future_steps).values, index=dates)
             info = f"SES (α={best_alpha:.2f})"
 
         elif model_type == "Holt":
-            p = optimize_params(train, 'Holt')
-            model = ExponentialSmoothing(train, trend='add', seasonal=None, damped_trend=True).fit(
-                smoothing_level=p[0], smoothing_trend=p[1], optimized=False)
+            # [FIX] Dùng Standard Holt (2 tham số) và thêm Fallback
+            try:
+                p = optimize_params(train, 'Holt')
+                model = ExponentialSmoothing(train, trend='add', seasonal=None, damped_trend=False).fit(
+                    smoothing_level=p[0], smoothing_trend=p[1], optimized=False)
+                
+                if future_steps > 0:
+                    p_full = optimize_params(data, 'Holt')
+                    model_full = ExponentialSmoothing(data, trend='add', seasonal=None, damped_trend=False).fit(
+                        smoothing_level=p_full[0], smoothing_trend=p_full[1], optimized=False)
+                info = f"Holt (α={p[0]:.2f}, β={p[1]:.2f})"
+            except:
+                # Nếu tối ưu tay lỗi, dùng auto
+                model = ExponentialSmoothing(train, trend='add', seasonal=None).fit(optimized=True)
+                if future_steps > 0: model_full = ExponentialSmoothing(data, trend='add', seasonal=None).fit(optimized=True)
+                info = "Holt (Auto)"
+
             preds[:] = model.forecast(len(test)).values
             if future_steps > 0:
-                p_full = optimize_params(data, 'Holt')
-                model_full = ExponentialSmoothing(data, trend='add', seasonal=None, damped_trend=True).fit(
-                    smoothing_level=p_full[0], smoothing_trend=p_full[1], optimized=False)
                 dates = pd.date_range(start=data.index[-1], periods=future_steps+1, freq=data.index.freq)[1:]
                 future_series = pd.Series(model_full.forecast(future_steps).values, index=dates)
-            info = f"Holt (α={p[0]:.2f}, β={p[1]:.2f})"
 
         elif model_type == "Holt-Winters":
             try:
                 p = optimize_params(train, 'HW', seasonal_periods=sp)
                 model = ExponentialSmoothing(train, trend='add', seasonal='add', seasonal_periods=sp).fit(
                     smoothing_level=p[0], smoothing_trend=p[1], smoothing_seasonal=p[2], optimized=False)
-                preds[:] = model.forecast(len(test)).values
+                
                 if future_steps > 0:
                     p_full = optimize_params(data, 'HW', seasonal_periods=sp)
                     model_full = ExponentialSmoothing(data, trend='add', seasonal='add', seasonal_periods=sp).fit(
                         smoothing_level=p_full[0], smoothing_trend=p_full[1], smoothing_seasonal=p_full[2], optimized=False)
-                    dates = pd.date_range(start=data.index[-1], periods=future_steps+1, freq=data.index.freq)[1:]
-                    future_series = pd.Series(model_full.forecast(future_steps).values, index=dates)
                 info = f"HW (sp={sp})"
             except:
-                p = optimize_params(train, 'Holt')
-                model = ExponentialSmoothing(train, trend='add', seasonal=None, damped_trend=True).fit(
-                    smoothing_level=p[0], smoothing_trend=p[1], optimized=False)
-                preds[:] = model.forecast(len(test)).values
+                # Fallback về Holt thường nếu HW lỗi
+                model = ExponentialSmoothing(train, trend='add', seasonal=None).fit(optimized=True)
+                if future_steps > 0: model_full = ExponentialSmoothing(data, trend='add', seasonal=None).fit(optimized=True)
                 info = "Holt (Fallback)"
-                warning_msg = "Not enough data for HW -> Switched to Holt"
+                warning_msg = "Data unsuitable for HW -> Switched to Holt"
+
+            preds[:] = model.forecast(len(test)).values
+            if future_steps > 0:
+                dates = pd.date_range(start=data.index[-1], periods=future_steps+1, freq=data.index.freq)[1:]
+                future_series = pd.Series(model_full.forecast(future_steps).values, index=dates)
 
     except Exception as e:
         info = "ERROR"
@@ -255,9 +266,9 @@ if btn_run:
             
             # 2. Resampling
             if freq_display == "MONTHLY":
-                data = data.resample('M').last().dropna()
+                data = data.resample('ME').last().dropna()
             elif freq_display == "QUARTERLY":
-                data = data.resample('Q').last().dropna()
+                data = data.resample('QE').last().dropna()
             else:
                 data = data.asfreq('B').fillna(method='ffill') 
 
