@@ -77,7 +77,7 @@ def show_intro_video(video_file, duration=8):
         st.error(f"Lỗi Intro: {e}")
         st.session_state['intro_done'] = True
 
-# Gọi Intro
+# Gọi Intro (File intro1.mp4 như bản cũ)
 show_intro_video("intro1.mp4", duration=7)
 
 
@@ -135,10 +135,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 3. LOGIC TÍNH TOÁN (CẬP NHẬT MỚI V4.0)
+# 3. LOGIC TÍNH TOÁN (LOGIC V4.0)
 # ==============================================================================
 
-# Hàm làm sạch dữ liệu
 def clean_yfinance_data(df):
     if df.empty: return None
     if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
@@ -146,9 +145,7 @@ def clean_yfinance_data(df):
     col = next((c for c in ['adj close', 'close', 'price'] if c in df.columns), df.columns[0])
     return df[col]
 
-# Hàm tính toán mô hình và dự báo
 def get_forecast(full_data, model_type, test_size, window_size, seasonal_p, freq_val):
-    # Chia train/test
     train = full_data.iloc[:-test_size]
     test = full_data.iloc[-test_size:]
     
@@ -157,77 +154,55 @@ def get_forecast(full_data, model_type, test_size, window_size, seasonal_p, freq
     warning = None
 
     try:
-        # --- MODEL 1: NAIVE ---
         if model_type == "Naive": 
             preds[:] = np.array([train.iloc[-1]] * len(test))
             info = "NAIVE"
 
-        # --- MODEL 2: MOVING AVERAGE (SỬA LỖI LOGIC ROLLING) ---
         elif model_type == "Moving Average": 
-            # Logic mới: Tính Rolling trên TOÀN BỘ dữ liệu, sau đó mới cắt phần Test
-            # Shift(1) đảm bảo dự báo tại thời điểm t chỉ dùng dữ liệu t-1 trở về trước
             rolling_series = full_data.rolling(window=window_size).mean().shift(1)
             preds = rolling_series.loc[test.index]
             info = f"MA({window_size})"
 
-        # --- MODEL 3: SES (Simple Exponential Smoothing) ---
         elif model_type == "SES":
-            # Tối ưu hóa Alpha
             def ses_loss(params):
                 mdl = SimpleExpSmoothing(train).fit(smoothing_level=params[0], optimized=False)
                 return mean_squared_error(train, mdl.fittedvalues)
-            
             res = minimize(ses_loss, [0.5], bounds=[(0.01, 0.99)], method='L-BFGS-B')
             alpha_opt = res.x[0]
-            
-            # Fit và Forecast
             model = SimpleExpSmoothing(train).fit(smoothing_level=alpha_opt, optimized=False)
             preds = model.forecast(len(test))
             info = f"α:{alpha_opt:.2f}"
 
-        # --- MODEL 4: HOLT'S LINEAR ---
         elif model_type == "Holt":
-            # Tối ưu hóa Alpha, Beta
             def holt_loss(params):
                 mdl = ExponentialSmoothing(train, trend='add').fit(
                     smoothing_level=params[0], smoothing_trend=params[1], optimized=False)
                 return mean_squared_error(train, mdl.fittedvalues)
-            
             res = minimize(holt_loss, [0.5, 0.1], bounds=[(0.01, 0.99), (0.01, 0.99)], method='L-BFGS-B')
             alpha_opt, beta_opt = res.x
-            
             model = ExponentialSmoothing(train, trend='add').fit(
                 smoothing_level=alpha_opt, smoothing_trend=beta_opt, optimized=False)
             preds = model.forecast(len(test))
             info = f"α:{alpha_opt:.2f} β:{beta_opt:.2f}"
 
-        # --- MODEL 5: HOLT-WINTERS (SỬA LỖI & THÊM CẢNH BÁO) ---
         elif model_type == "Holt-Winters":
-            # 1. Cảnh báo nếu dùng cho Daily
             if freq_val == 'D' or seasonal_p > 12: 
                 warning = "Mô hình có thể không phù hợp để dự báo (Daily Data)"
             
-            # 2. Tối ưu hóa Alpha, Beta, Gamma
             def hw_loss(params):
                 try:
                     mdl = ExponentialSmoothing(train, trend='add', seasonal='add', seasonal_periods=seasonal_p).fit(
                         smoothing_level=params[0], smoothing_trend=params[1], smoothing_seasonal=params[2], optimized=False)
                     return mean_squared_error(train, mdl.fittedvalues)
-                except: return 1e10 # Return large error if model fails
+                except: return 1e10
 
-            # Giá trị khởi tạo [alpha, beta, gamma]
             initial_guess = [0.3, 0.1, 0.1]
             bounds = [(0.01, 0.99), (0.01, 0.99), (0.01, 0.99)]
-            
             res = minimize(hw_loss, initial_guess, bounds=bounds, method='L-BFGS-B')
             alpha_opt, beta_opt, gamma_opt = res.x
-            
-            # Fit mô hình với tham số tối ưu
             model = ExponentialSmoothing(train, trend='add', seasonal='add', seasonal_periods=seasonal_p).fit(
                 smoothing_level=alpha_opt, smoothing_trend=beta_opt, smoothing_seasonal=gamma_opt, optimized=False)
-            
             preds = model.forecast(len(test))
-            # Hiển thị đủ 3 chỉ số
             info = f"α:{alpha_opt:.2f} β:{beta_opt:.2f} γ:{gamma_opt:.2f}"
 
     except Exception as e:
@@ -243,7 +218,7 @@ def get_forecast(full_data, model_type, test_size, window_size, seasonal_p, freq
 if 'vs_mode' not in st.session_state: st.session_state.vs_mode = False
 
 st.markdown("<h1>PIXEL TRADER</h1>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>ULTIMATE EDITION [v4.0]</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>ULTIMATE EDITION [v4.1]</div>", unsafe_allow_html=True)
 
 with st.container():
     c1, c2, c3 = st.columns([1, 3, 1]) 
@@ -281,35 +256,79 @@ if btn_run or st.session_state.get('run_success', False):
             data = data.astype(float)
             if data.index.tz is not None: data.index = data.index.tz_localize(None)
             
-            # Resample & Seasonality Logic
-            seasonal_p = 5 # Default for Daily
-            if freq_val == "M": 
-                data = data.resample('M').last()
-                seasonal_p = 12
-            elif freq_val == "Q": 
-                data = data.resample('Q').last()
-                seasonal_p = 4
-            else: 
-                data = data.asfreq('B').fillna(method='ffill')
-                seasonal_p = 5 # Weekly seasonality for daily data
+            seasonal_p = 5 
+            if freq_val == "M": data = data.resample('M').last(); seasonal_p = 12
+            elif freq_val == "Q": data = data.resample('Q').last(); seasonal_p = 4
+            else: data = data.asfreq('B').fillna(method='ffill'); seasonal_p = 5
             
             data = data.dropna()
             if len(data) < test_size + 10: st.error("⚠️ DATA TOO SHORT."); st.stop()
 
-            # GỌI HÀM DỰ BÁO (Đã cập nhật logic)
+            # GỌI HÀM DỰ BÁO
             train, test, preds, info, warning_msg = get_forecast(data, model_display, test_size, window_size, seasonal_p, freq_val)
 
-            # Metrics
+            # Tính Metrics
             mask = ~np.isnan(preds) & ~np.isnan(test)
             rmse = np.sqrt(mean_squared_error(test[mask], preds[mask])) if mask.sum() > 0 else 0
             mape = mean_absolute_percentage_error(test[mask], preds[mask]) * 100 if mask.sum() > 0 else 0
 
-            # HIỂN THỊ CẢNH BÁO (Nếu có)
-            if warning_msg:
-                st.warning(f"⚠️ {warning_msg}")
+            # CẢNH BÁO
+            if warning_msg: st.warning(f"⚠️ {warning_msg}")
 
-            # HIỂN THỊ METRICS
+            # ==================================================================
+            # [MỚI] PHẦN HIỂN THỊ THÔNG TIN TÀI CHÍNH (MARKET STATS)
+            # ==================================================================
             st.markdown(f"<div style='text-align:center; font-family:\"Press Start 2P\"; color:#00ff41; margin-bottom:10px'>TARGET: {ticker}</div>", unsafe_allow_html=True)
+            
+            # Tính toán các chỉ số
+            current_price = test.iloc[-1]
+            predicted_price = preds.iloc[-1]
+            
+            # Tính % biến động của đường dự báo (Trend) từ đầu kỳ test đến cuối kỳ test
+            if not np.isnan(predicted_price) and not np.isnan(preds.iloc[0]):
+                trend_pct = ((predicted_price - preds.iloc[0]) / preds.iloc[0]) * 100
+            else:
+                trend_pct = 0.0
+
+            # Màu sắc trend: Xanh nếu tăng, Đỏ nếu giảm
+            trend_color = "#00ff41" if trend_pct >= 0 else "#ff3333"
+            trend_arrow = "▲" if trend_pct >= 0 else "▼"
+
+            # Layout 3 cột cho thông tin tài chính
+            stat1, stat2, stat3 = st.columns(3)
+            
+            # CSS Style chung cho ô
+            stat_box_style = "border:2px solid #fff; padding:10px; text-align:center; background: rgba(255,255,255,0.05); margin-bottom: 20px;"
+            stat_label = "font-family: 'Press Start 2P'; font-size: 12px; color: #aaa; margin-bottom: 8px;"
+            stat_val = "font-family: 'VT323'; font-size: 36px; line-height: 1; color: #fff;"
+
+            # Ô 1: Giá hiện tại
+            stat1.markdown(f"""
+                <div style='{stat_box_style} border-color: #aaa;'>
+                    <div style='{stat_label}'>CURRENT PRICE</div>
+                    <div style='{stat_val}'>${current_price:,.2f}</div>
+                </div>
+            """, unsafe_allow_html=True)
+
+            # Ô 2: Giá dự báo (Cuối kỳ)
+            stat2.markdown(f"""
+                <div style='{stat_box_style} border-color: #ff00ff;'>
+                    <div style='{stat_label} color:#ff00ff;'>PREDICTED (END)</div>
+                    <div style='{stat_val} color:#ff00ff;'>${predicted_price:,.2f}</div>
+                </div>
+            """, unsafe_allow_html=True)
+
+            # Ô 3: Xu hướng dự báo (%)
+            stat3.markdown(f"""
+                <div style='{stat_box_style} border-color: {trend_color};'>
+                    <div style='{stat_label} color:{trend_color};'>TREND FORECAST</div>
+                    <div style='{stat_val} color:{trend_color};'>{trend_arrow} {abs(trend_pct):.2f}%</div>
+                </div>
+            """, unsafe_allow_html=True)
+
+            # ==================================================================
+            # PHẦN HIỂN THỊ METRICS CŨ (RMSE/MAPE/PARAMS)
+            # ==================================================================
             c_m1, c_m2, c_m3 = st.columns(3)
             
             box_style = "border:2px solid #00ff41; padding:10px; text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;"
@@ -364,7 +383,6 @@ if btn_run or st.session_state.get('run_success', False):
                             val = val.dropna()
                             
                             if len(val) > test_size + window_size:
-                                # Sử dụng hàm get_forecast mới cho cả phần so sánh
                                 _, _, pred_t, _, _ = get_forecast(val, model_display, test_size, window_size, seasonal_p, freq_val)
                                 if not pred_t.isna().all(): results_map[t] = pred_t
                     except Exception: pass
