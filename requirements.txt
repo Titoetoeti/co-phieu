@@ -1,9 +1,10 @@
 streamlit
+yfinance
 pandas
 numpy
-matplotlib
-yfinance
-statsmodels
-scikit-learn
-scipy
 plotly
+matplotlib
+scikit-learn
+tensorflow
+xgboost
+pmdarima
