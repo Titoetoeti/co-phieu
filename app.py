@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go # Thư viện biểu đồ tương tác
+import matplotlib.pyplot as plt
 import yfinance as yf
 from statsmodels.tsa.api import SimpleExpSmoothing, ExponentialSmoothing
 from sklearn.metrics import mean_squared_error, mean_absolute_percentage_error
@@ -12,12 +12,11 @@ import base64
 import os
 
 # ==============================================================================
-# 1. CẤU HÌNH & HÀM HỖ TRỢ (GIỮ NGUYÊN)
+# 1. CẤU HÌNH & HÀM HỖ TRỢ (GIỮ NGUYÊN TỪ V3.5)
 # ==============================================================================
 warnings.filterwarnings("ignore")
 st.set_page_config(page_title="PIXEL TRADER PRO", layout="wide", page_icon="📈")
-# Vẫn giữ cấu hình này cho Matplotlib dù ta dùng Plotly (để an toàn)
-plt.style.use('dark_background') 
+plt.style.use('dark_background')
 
 # --- HÀM INTRO VIDEO ---
 def show_intro_video(video_file, duration=8):
@@ -78,7 +77,7 @@ def show_intro_video(video_file, duration=8):
         st.error(f"Lỗi Intro: {e}")
         st.session_state['intro_done'] = True
 
-# Gọi Intro
+# Gọi Intro (File intro1.mp4)
 show_intro_video("intro1.mp4", duration=7)
 
 
@@ -136,9 +135,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 3. LOGIC TÍNH TOÁN (V4.0)
+# 3. LOGIC TÍNH TOÁN (CẬP NHẬT MỚI V4.0 - DỰA TRÊN CODE 1.TXT)
 # ==============================================================================
 
+# Hàm làm sạch dữ liệu
 def clean_yfinance_data(df):
     if df.empty: return None
     if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
@@ -146,7 +146,9 @@ def clean_yfinance_data(df):
     col = next((c for c in ['adj close', 'close', 'price'] if c in df.columns), df.columns[0])
     return df[col]
 
+# Hàm tính toán mô hình và dự báo (LOGIC MỚI)
 def get_forecast(full_data, model_type, test_size, window_size, seasonal_p, freq_val):
+    # Chia train/test
     train = full_data.iloc[:-test_size]
     test = full_data.iloc[-test_size:]
     
@@ -155,55 +157,79 @@ def get_forecast(full_data, model_type, test_size, window_size, seasonal_p, freq
     warning = None
 
     try:
+        # --- MODEL 1: NAIVE ---
         if model_type == "Naive": 
+            # Dự báo bằng giá trị cuối cùng của tập Train
             preds[:] = np.array([train.iloc[-1]] * len(test))
             info = "NAIVE"
 
+        # --- MODEL 2: MOVING AVERAGE (SỬA LỖI LOGIC ROLLING) ---
         elif model_type == "Moving Average": 
+            # Logic mới: Tính Rolling trên TOÀN BỘ dữ liệu (Train + Test), sau đó shift(1) để tránh nhìn trộm tương lai
+            # Cách này đảm bảo tại thời điểm t, ta dùng trung bình của [t-window, t-1]
             rolling_series = full_data.rolling(window=window_size).mean().shift(1)
             preds = rolling_series.loc[test.index]
             info = f"MA({window_size})"
 
+        # --- MODEL 3: SES (Simple Exponential Smoothing) ---
         elif model_type == "SES":
+            # Tối ưu hóa Alpha bằng scipy.optimize
             def ses_loss(params):
                 mdl = SimpleExpSmoothing(train).fit(smoothing_level=params[0], optimized=False)
                 return mean_squared_error(train, mdl.fittedvalues)
+            
+            # Tìm alpha tốt nhất trong khoảng (0.01, 0.99)
             res = minimize(ses_loss, [0.5], bounds=[(0.01, 0.99)], method='L-BFGS-B')
             alpha_opt = res.x[0]
+            
+            # Fit lại mô hình với tham số tối ưu
             model = SimpleExpSmoothing(train).fit(smoothing_level=alpha_opt, optimized=False)
             preds = model.forecast(len(test))
             info = f"α:{alpha_opt:.2f}"
 
+        # --- MODEL 4: HOLT'S LINEAR ---
         elif model_type == "Holt":
+            # Tối ưu hóa Alpha, Beta
             def holt_loss(params):
                 mdl = ExponentialSmoothing(train, trend='add').fit(
                     smoothing_level=params[0], smoothing_trend=params[1], optimized=False)
                 return mean_squared_error(train, mdl.fittedvalues)
+            
             res = minimize(holt_loss, [0.5, 0.1], bounds=[(0.01, 0.99), (0.01, 0.99)], method='L-BFGS-B')
             alpha_opt, beta_opt = res.x
+            
             model = ExponentialSmoothing(train, trend='add').fit(
                 smoothing_level=alpha_opt, smoothing_trend=beta_opt, optimized=False)
             preds = model.forecast(len(test))
             info = f"α:{alpha_opt:.2f} β:{beta_opt:.2f}"
 
+        # --- MODEL 5: HOLT-WINTERS (SỬA LỖI & THÊM CẢNH BÁO) ---
         elif model_type == "Holt-Winters":
-            if freq_val == 'D' or seasonal_p > 12: 
-                warning = "Mô hình có thể không phù hợp để dự báo (Daily Data)"
+            # 1. Cảnh báo nếu dùng cho Daily (hoặc chu kỳ > 12 ngày thường nhiễu)
+            if freq_val == 'DAILY' or seasonal_p < 2: 
+                warning = "Mô hình có thể không phù hợp để dự báo (Dữ liệu ngày thường nhiễu)"
             
+            # 2. Tối ưu hóa Alpha, Beta, Gamma
             def hw_loss(params):
                 try:
                     mdl = ExponentialSmoothing(train, trend='add', seasonal='add', seasonal_periods=seasonal_p).fit(
                         smoothing_level=params[0], smoothing_trend=params[1], smoothing_seasonal=params[2], optimized=False)
                     return mean_squared_error(train, mdl.fittedvalues)
-                except: return 1e10
+                except: return 1e10 # Trả về lỗi lớn nếu mô hình không hội tụ
 
+            # Giá trị khởi tạo [alpha, beta, gamma]
             initial_guess = [0.3, 0.1, 0.1]
             bounds = [(0.01, 0.99), (0.01, 0.99), (0.01, 0.99)]
+            
             res = minimize(hw_loss, initial_guess, bounds=bounds, method='L-BFGS-B')
             alpha_opt, beta_opt, gamma_opt = res.x
+            
+            # Fit mô hình với tham số tối ưu
             model = ExponentialSmoothing(train, trend='add', seasonal='add', seasonal_periods=seasonal_p).fit(
                 smoothing_level=alpha_opt, smoothing_trend=beta_opt, smoothing_seasonal=gamma_opt, optimized=False)
+            
             preds = model.forecast(len(test))
+            # Hiển thị đủ 3 chỉ số
             info = f"α:{alpha_opt:.2f} β:{beta_opt:.2f} γ:{gamma_opt:.2f}"
 
     except Exception as e:
@@ -219,7 +245,7 @@ def get_forecast(full_data, model_type, test_size, window_size, seasonal_p, freq
 if 'vs_mode' not in st.session_state: st.session_state.vs_mode = False
 
 st.markdown("<h1>PIXEL TRADER</h1>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>ULTIMATE EDITION [v4.3 - INTERACTIVE]</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>ULTIMATE EDITION [v4.0]</div>", unsafe_allow_html=True)
 
 with st.container():
     c1, c2, c3 = st.columns([1, 3, 1]) 
@@ -242,7 +268,7 @@ st.markdown("---")
 # 5. XỬ LÝ & HIỂN THỊ
 # ==============================================================================
 freq_map = {"DAILY": "D", "MONTHLY": "M", "QUARTERLY": "Q"}
-freq_val = freq_map[freq_display]
+freq_val = freq_map[freq_display] # Lưu biến này để dùng cho logic cảnh báo HW
 
 if btn_run: st.session_state.vs_mode = False
 
@@ -257,45 +283,37 @@ if btn_run or st.session_state.get('run_success', False):
             data = data.astype(float)
             if data.index.tz is not None: data.index = data.index.tz_localize(None)
             
-            seasonal_p = 5 
-            if freq_val == "M": data = data.resample('M').last(); seasonal_p = 12
-            elif freq_val == "Q": data = data.resample('Q').last(); seasonal_p = 4
-            else: data = data.asfreq('B').fillna(method='ffill'); seasonal_p = 5
+            # Resample & Seasonality Logic
+            seasonal_p = 5 # Default for Daily
+            if freq_display == "MONTHLY": 
+                data = data.resample('M').last()
+                seasonal_p = 12
+            elif freq_display == "QUARTERLY": 
+                data = data.resample('Q').last()
+                seasonal_p = 4
+            else: 
+                data = data.asfreq('B').fillna(method='ffill')
+                seasonal_p = 5 # Weekly seasonality for daily data
             
             data = data.dropna()
             if len(data) < test_size + 10: st.error("⚠️ DATA TOO SHORT."); st.stop()
 
-            # GỌI HÀM DỰ BÁO
-            train, test, preds, info, warning_msg = get_forecast(data, model_display, test_size, window_size, seasonal_p, freq_val)
+            # GỌI HÀM DỰ BÁO (Đã cập nhật logic mới)
+            train, test, preds, info, warning_msg = get_forecast(data, model_display, test_size, window_size, seasonal_p, freq_display)
 
+            # Metrics
             mask = ~np.isnan(preds) & ~np.isnan(test)
             rmse = np.sqrt(mean_squared_error(test[mask], preds[mask])) if mask.sum() > 0 else 0
             mape = mean_absolute_percentage_error(test[mask], preds[mask]) * 100 if mask.sum() > 0 else 0
 
-            if warning_msg: st.warning(f"⚠️ {warning_msg}")
+            # HIỂN THỊ CẢNH BÁO (Nếu có)
+            if warning_msg:
+                st.warning(f"⚠️ {warning_msg}")
 
-            # --- MARKET STATS ---
+            # HIỂN THỊ METRICS
             st.markdown(f"<div style='text-align:center; font-family:\"Press Start 2P\"; color:#00ff41; margin-bottom:10px'>TARGET: {ticker}</div>", unsafe_allow_html=True)
-            
-            current_price = test.iloc[-1]
-            predicted_price = preds.iloc[-1]
-            if not np.isnan(predicted_price) and not np.isnan(preds.iloc[0]):
-                trend_pct = ((predicted_price - preds.iloc[0]) / preds.iloc[0]) * 100
-            else: trend_pct = 0.0
-            trend_color = "#00ff41" if trend_pct >= 0 else "#ff3333"
-            trend_arrow = "▲" if trend_pct >= 0 else "▼"
-
-            stat1, stat2, stat3 = st.columns(3)
-            stat_box_style = "border:2px solid #fff; padding:10px; text-align:center; background: rgba(255,255,255,0.05); margin-bottom: 20px;"
-            stat_label = "font-family: 'Press Start 2P'; font-size: 12px; color: #aaa; margin-bottom: 8px;"
-            stat_val = "font-family: 'VT323'; font-size: 36px; line-height: 1; color: #fff;"
-
-            stat1.markdown(f"<div style='{stat_box_style} border-color: #aaa;'><div style='{stat_label}'>CURRENT PRICE</div><div style='{stat_val}'>${current_price:,.2f}</div></div>", unsafe_allow_html=True)
-            stat2.markdown(f"<div style='{stat_box_style} border-color: #ff00ff;'><div style='{stat_label} color:#ff00ff;'>PREDICTED (END)</div><div style='{stat_val} color:#ff00ff;'>${predicted_price:,.2f}</div></div>", unsafe_allow_html=True)
-            stat3.markdown(f"<div style='{stat_box_style} border-color: {trend_color};'><div style='{stat_label} color:{trend_color};'>TREND FORECAST</div><div style='{stat_val} color:{trend_color};'>{trend_arrow} {abs(trend_pct):.2f}%</div></div>", unsafe_allow_html=True)
-
-            # --- METRICS ---
             c_m1, c_m2, c_m3 = st.columns(3)
+            
             box_style = "border:2px solid #00ff41; padding:10px; text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;"
             label_font = "font-family: 'Press Start 2P', cursive; font-size: 14px; margin-bottom: 5px; color: #00ff41;"
             value_font = "font-family: 'VT323', monospace; font-size: 40px; margin: 0; line-height: 1; color: #ffffff;"
@@ -305,65 +323,18 @@ if btn_run or st.session_state.get('run_success', False):
             c_m3.markdown(f"<div style='border:2px solid #00ffff; padding:10px; text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;'><div style='font-family: \"Press Start 2P\", cursive; font-size: 14px; margin-bottom: 5px; color: #00ffff;'>PARAMS</div><div style='font-family: \"VT323\", monospace; font-size: 35px; margin: 0; line-height: 1; color: #ffffff;'>{info}</div></div>", unsafe_allow_html=True)
 
             st.write("")
+            fig, ax = plt.subplots(figsize=(14, 6), facecolor='black')
+            ax.set_facecolor('black')
+            fig.patch.set_alpha(0) 
+            ax.patch.set_alpha(0)
             
-            # ==================================================================
-            # [THAY ĐỔI] SỬ DỤNG PLOTLY ĐỂ VẼ BIỂU ĐỒ TƯƠNG TÁC
-            # ==================================================================
-            
-            fig = go.Figure()
-
-            # 1. Vẽ dữ liệu Train (Màu xám)
-            fig.add_trace(go.Scatter(
-                x=train.index[-60:], # Lấy 60 điểm cuối để đỡ rối
-                y=train.iloc[-60:],
-                mode='lines',
-                name='TRAIN',
-                line=dict(color='#555555', width=1.5)
-            ))
-
-            # 2. Vẽ dữ liệu Thực tế (Màu Xanh Neon)
-            fig.add_trace(go.Scatter(
-                x=test.index,
-                y=test,
-                mode='lines+markers',
-                name='ACTUAL',
-                line=dict(color='#00ff41', width=3),
-                marker=dict(size=4)
-            ))
-
-            # 3. Vẽ dữ liệu Dự báo (Màu Tím Neon)
-            fig.add_trace(go.Scatter(
-                x=preds.index,
-                y=preds,
-                mode='lines+markers',
-                name='PREDICT',
-                line=dict(color='#ff00ff', width=3, dash='dash'),
-                marker=dict(size=6, symbol='circle')
-            ))
-
-            # Cấu hình giao diện biểu đồ (Dark Mode)
-            fig.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)', # Nền trong suốt
-                plot_bgcolor='rgba(0,0,0,0)',  # Nền trong suốt
-                font=dict(family='Courier New, monospace', color='#ffffff'), # Font chữ kiểu code
-                xaxis=dict(
-                    showgrid=True, gridcolor='#333333', 
-                    tickfont=dict(color='#00ff41')
-                ),
-                yaxis=dict(
-                    showgrid=True, gridcolor='#333333', 
-                    tickfont=dict(color='#ffffff')
-                ),
-                hovermode="x unified", # Rê chuột hiện tất cả thông số cùng lúc
-                legend=dict(
-                    orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
-                ),
-                margin=dict(l=0, r=0, t=30, b=0)
-            )
-
-            # Hiển thị biểu đồ Plotly
-            st.plotly_chart(fig, use_container_width=True)
-
+            ax.plot(train.index[-60:], train.iloc[-60:], color='#777', label='TRAIN')
+            ax.plot(test.index, test, color='#00ff41', linewidth=2.5, label='ACTUAL')
+            ax.plot(test.index, preds, color='#ff00ff', linestyle='--', linewidth=2, marker='o', markersize=5, label='PREDICT')
+            ax.legend(facecolor='black', edgecolor='#333', labelcolor='#fff')
+            ax.grid(color='#333', linestyle=':')
+            for s in ax.spines.values(): s.set_edgecolor('#333')
+            st.pyplot(fig)
 
             # --- VS MODE ---
             st.markdown("---")
@@ -388,12 +359,17 @@ if btn_run or st.session_state.get('run_success', False):
                         if val is not None and not val.empty:
                             val = val.astype(float)
                             if val.index.tz is not None: val.index = val.index.tz_localize(None)
-                            if freq_val == "M": val = val.resample('M').last()
-                            elif freq_val == "Q": val = val.resample('Q').last()
+                            
+                            # Resample cho khớp
+                            if freq_display == "MONTHLY": val = val.resample('M').last()
+                            elif freq_display == "QUARTERLY": val = val.resample('Q').last()
                             else: val = val.asfreq('B').fillna(method='ffill')
                             val = val.dropna()
+                            
+                            # Kiểm tra độ dài
                             if len(val) > test_size + window_size:
-                                _, _, pred_t, _, _ = get_forecast(val, model_display, test_size, window_size, seasonal_p, freq_val)
+                                # Sử dụng hàm get_forecast mới cho cả phần so sánh
+                                _, _, pred_t, _, _ = get_forecast(val, model_display, test_size, window_size, seasonal_p, freq_display)
                                 if not pred_t.isna().all(): results_map[t] = pred_t
                     except Exception: pass
                     progress_bar.progress((i + 1) / len(all_tickers))
@@ -401,40 +377,26 @@ if btn_run or st.session_state.get('run_success', False):
 
                 if len(results_map) > 0:
                     st.markdown("<h4 style='text-align:center; font-family:VT323; margin-top:20px'>PREDICTED GROWTH (%) COMPARISON</h4>", unsafe_allow_html=True)
-                    
-                    # [THAY ĐỔI] BIỂU ĐỒ VS MODE TƯƠNG TÁC
-                    fig2 = go.Figure()
-                    
+                    fig2, ax2 = plt.subplots(figsize=(14, 7), facecolor='black')
+                    fig2.patch.set_alpha(0)
+                    ax2.set_facecolor('black')
+                    ax2.patch.set_alpha(0)
                     colors = ['#00ff41', '#ff00ff', '#00ffff', '#ffcc00', '#ff3333']
-                    
                     for idx, (t_name, pred_series) in enumerate(results_map.items()):
                         if len(pred_series) > 0:
                             start_val = pred_series.iloc[0]
                             if not np.isnan(start_val) and start_val != 0:
                                 pct_change = ((pred_series - start_val) / start_val) * 100
-                                
-                                width_line = 4 if t_name == ticker else 2
-                                dash_style = 'solid' if t_name == ticker else 'dot'
-                                line_color = colors[idx % len(colors)]
-                                
-                                fig2.add_trace(go.Scatter(
-                                    x=pred_series.index,
-                                    y=pct_change,
-                                    mode='lines',
-                                    name=f"{t_name}",
-                                    line=dict(color=line_color, width=width_line, dash=dash_style)
-                                ))
-
-                    fig2.update_layout(
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        plot_bgcolor='rgba(0,0,0,0)',
-                        font=dict(family='Courier New, monospace', color='#ffffff'),
-                        xaxis=dict(showgrid=True, gridcolor='#333333'),
-                        yaxis=dict(showgrid=True, gridcolor='#333333', title="Growth %"),
-                        hovermode="x unified"
-                    )
-                    
-                    st.plotly_chart(fig2, use_container_width=True)
+                                lw = 3 if t_name == ticker else 2
+                                ls = '-' if t_name == ticker else '--'
+                                color = colors[idx % len(colors)]
+                                ax2.plot(pred_series.index, pct_change, label=f"{t_name}", color=color, linewidth=lw, linestyle=ls)
+                    ax2.set_ylabel("GROWTH %")
+                    ax2.legend(facecolor='black', edgecolor='#333', labelcolor='#fff')
+                    ax2.grid(color='#222', linestyle=':')
+                    ax2.axhline(0, color='#555', linewidth=1)
+                    for s in ax2.spines.values(): s.set_edgecolor('#333')
+                    st.pyplot(fig2)
                 else: st.warning("No valid data found for comparison.")
 
     except Exception as e:
