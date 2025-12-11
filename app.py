@@ -256,7 +256,7 @@ def get_forecast(full_data, model_type, test_size, window_size, future_days=0):
 
 if 'vs_mode' not in st.session_state: st.session_state.vs_mode = False
 
-st.markdown("<h1>PIXEL TRADER AI</h1>", unsafe_allow_html=True)
+st.markdown("<h1>STOCKs FORECAST</h1>", unsafe_allow_html=True)
 st.markdown("<div class='sub-title'>LOCAL FILE EDITION</div>", unsafe_allow_html=True)
 
 df_full = load_local_data(DATA_FILE)
@@ -444,3 +444,4 @@ else:
         </div>
         <style>@keyframes blinker { 50% { opacity: 0; } }</style>
     """, unsafe_allow_html=True)
+
