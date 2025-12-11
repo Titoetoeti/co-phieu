@@ -254,7 +254,7 @@ if btn_run or st.session_state.get('run_success', False):
     
     try:
         with st.spinner(f"LOADING DATA: {ticker}..."):
-            df = yf.download(ticker, period="5y", progress=False)
+            df = yf.download(ticker, start="2020-11-23", end="2025-11-21", progress=False)
             data = clean_yfinance_data(df)
             if data is None: st.error("❌ DATA NOT FOUND."); st.stop()
             data = data.astype(float)
@@ -377,7 +377,7 @@ if btn_run or st.session_state.get('run_success', False):
                 
                 for i, t in enumerate(all_tickers):
                     try:
-                        d_t = yf.download(t, period="2y", progress=False)
+                        d_t = yf.download(t, start="2020-11-23", end="2025-11-21", progress=False)
                         val = clean_yfinance_data(d_t)
                         if val is not None and not val.empty:
                             val = val.astype(float)
@@ -439,3 +439,4 @@ else:
         </div>
         <style>@keyframes blinker { 50% { opacity: 0; } }</style>
     """, unsafe_allow_html=True)
+
