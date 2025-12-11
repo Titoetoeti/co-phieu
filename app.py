@@ -6,69 +6,79 @@ import matplotlib.pyplot as plt
 import yfinance as yf
 from statsmodels.tsa.api import SimpleExpSmoothing, ExponentialSmoothing
 from sklearn.metrics import mean_squared_error, mean_absolute_percentage_error
-from scipy.optimize import minimize  # <--- VŨ KHÍ BÍ MẬT CỦA COLAB
+from scipy.optimize import minimize 
 import warnings
 import time
 import base64
 import os
+import gc # Thư viện dọn rác bộ nhớ
 
 # ==============================================================================
-# 1. CẤU HÌNH & HÀM HỖ TRỢ
+# 1. CẤU HÌNH GIAO DIỆN
 # ==============================================================================
 warnings.filterwarnings("ignore")
 st.set_page_config(page_title="PIXEL TRADER (COLAB CORE)", layout="wide", page_icon="🧪")
 plt.style.use('dark_background') 
 
-# --- HÀM TỐI ƯU HÓA THAM SỐ (Trích xuất từ Colab) ---
-# Hàm này dùng thuật toán L-BFGS-B để tìm tham số 'ngon' nhất thay vì để máy tự chọn
-def optimize_params(data, model_type, seasonal_periods=None):
-    def loss_func(params):
-        try:
-            if model_type == 'SES':
-                # params[0] = alpha
-                model = SimpleExpSmoothing(data).fit(smoothing_level=params[0], optimized=False)
-            elif model_type == 'Holt':
-                # params[0]=alpha, params[1]=beta
-                model = ExponentialSmoothing(data, trend='add', seasonal=None, damped_trend=True).fit(
-                    smoothing_level=params[0], smoothing_trend=params[1], optimized=False)
-            elif model_type == 'HW': # Holt-Winters
-                # params[0]=alpha, params[1]=beta, params[2]=gamma
-                model = ExponentialSmoothing(data, trend='add', seasonal='add', seasonal_periods=seasonal_periods).fit(
-                    smoothing_level=params[0], smoothing_trend=params[1], smoothing_seasonal=params[2], optimized=False)
-            
-            # Trả về tổng bình phương sai số (càng nhỏ càng tốt)
-            return np.sum((data - model.fittedvalues)**2)
-        except:
-            return 1e10 # Phạt nặng nếu lỗi
-
-    # Ràng buộc tham số trong khoảng 0.01 đến 0.99 (Giống Colab)
-    bounds = [(0.01, 0.99)]
-    if model_type == 'Holt': bounds = [(0.01, 0.99), (0.01, 0.99)]
-    if model_type == 'HW': bounds = [(0.01, 0.99), (0.01, 0.99), (0.01, 0.99)]
-
-    # Giá trị khởi tạo
-    x0 = [0.5] * len(bounds)
-    
-    # Chạy tối ưu hóa
-    res = minimize(loss_func, x0, bounds=bounds, method='L-BFGS-B')
-    return res.x
-
-# --- INTRO VIDEO ---
+# --- HÀM INTRO VIDEO (ĐÃ ĐƯỢC TỐI ƯU BỘ NHỚ) ---
 def show_intro_video(video_file, duration=8):
-    if 'intro_done' not in st.session_state: st.session_state['intro_done'] = False
-    if st.session_state['intro_done']: return
-    if not os.path.exists(video_file): st.session_state['intro_done'] = True; return
-    try:
-        with open(video_file, "rb") as f: v = base64.b64encode(f.read()).decode()
-        st.markdown(f"""<style>.stApp {{overflow:hidden}} #intro {{position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:999}}</style><div id="intro"><video style="width:100%;height:100%;object-fit:cover" autoplay muted playsinline><source src="data:video/mp4;base64,{v}" type="video/mp4"></video></div>""", unsafe_allow_html=True)
-        time.sleep(duration); st.empty(); st.session_state['intro_done'] = True; st.rerun()
-    except: st.session_state['intro_done'] = True
+    if 'intro_done' not in st.session_state:
+        st.session_state['intro_done'] = False
 
+    if st.session_state['intro_done']:
+        return
+
+    if not os.path.exists(video_file):
+        st.session_state['intro_done'] = True
+        return
+
+    try:
+        # Đọc file video
+        with open(video_file, "rb") as f:
+            video_bytes = f.read()
+        video_str = base64.b64encode(video_bytes).decode()
+        
+        # Hiển thị
+        intro_placeholder = st.empty()
+        intro_placeholder.markdown(
+            f"""
+            <style>
+                .stApp {{ overflow: hidden; }}
+                #intro-overlay {{
+                    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+                    background-color: #000000; z-index: 999999;
+                    display: flex; justify-content: center; align-items: center;
+                    flex-direction: column;
+                }}
+                #intro-video {{ width: 100%; height: 100%; object-fit: cover; }}
+            </style>
+            <div id="intro-overlay">
+                <video id="intro-video" autoplay muted playsinline>
+                    <source src="data:video/mp4;base64,{video_str}" type="video/mp4">
+                </video>
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
+        
+        time.sleep(duration)
+        intro_placeholder.empty()
+        st.session_state['intro_done'] = True
+        
+        # [QUAN TRỌNG] Xóa dữ liệu video khỏi RAM ngay lập tức
+        del video_bytes
+        del video_str
+        gc.collect() 
+        
+        st.rerun()
+
+    except Exception:
+        st.session_state['intro_done'] = True
+
+# CHẠY INTRO
 show_intro_video("intro1.mp4", duration=6)
 
-# ==============================================================================
-# 2. CSS GIAO DIỆN
-# ==============================================================================
+# --- CSS TÙY CHỈNH ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
@@ -77,15 +87,38 @@ st.markdown("""
         input { color: #ffffff !important; font-family: 'VT323', monospace !important; font-size: 22px !important; }
         div[data-baseweb="select"] > div { background-color: #000 !important; color: #ffffff !important; border-color: #00ff41 !important; }
         label p { font-size: 18px !important; font-family: 'Press Start 2P', cursive !important; color: #00ff41 !important; }
-        h1 { font-family: 'Press Start 2P'; text-align: center; color: #00ff41; font-size: 60px; }
+        h1 { font-family: 'Press Start 2P'; text-align: center; color: #00ff41; font-size: 50px; margin-bottom: 0px;}
         div.stButton > button { width: 100%; background-color: #000; color: #00ff41; border: 2px solid #00ff41; font-family: 'Press Start 2P'; padding: 15px; }
         div.stButton > button:hover { background-color: #00ff41; color: #000; box-shadow: 0 0 15px #00ff41; }
     </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 3. LOGIC TÍNH TOÁN (CORE COLAB)
+# 2. HÀM TỐI ƯU HÓA (CORE TỪ COLAB)
 # ==============================================================================
+# Hàm này dùng thuật toán L-BFGS-B để tìm tham số 'ngon' nhất
+def optimize_params(data, model_type, seasonal_periods=None):
+    def loss_func(params):
+        try:
+            if model_type == 'SES':
+                model = SimpleExpSmoothing(data).fit(smoothing_level=params[0], optimized=False)
+            elif model_type == 'Holt':
+                model = ExponentialSmoothing(data, trend='add', seasonal=None, damped_trend=True).fit(
+                    smoothing_level=params[0], smoothing_trend=params[1], optimized=False)
+            elif model_type == 'HW':
+                model = ExponentialSmoothing(data, trend='add', seasonal='add', seasonal_periods=seasonal_periods).fit(
+                    smoothing_level=params[0], smoothing_trend=params[1], smoothing_seasonal=params[2], optimized=False)
+            return np.sum((data - model.fittedvalues)**2)
+        except:
+            return 1e10 
+
+    bounds = [(0.01, 0.99)]
+    if model_type == 'Holt': bounds = [(0.01, 0.99), (0.01, 0.99)]
+    if model_type == 'HW': bounds = [(0.01, 0.99), (0.01, 0.99), (0.01, 0.99)]
+
+    x0 = [0.5] * len(bounds)
+    res = minimize(loss_func, x0, bounds=bounds, method='L-BFGS-B')
+    return res.x
 
 def clean_yfinance_data(df):
     if df.empty: return None
@@ -95,7 +128,6 @@ def clean_yfinance_data(df):
     return df[col]
 
 def get_forecast(data, model_type, test_size, window_size, future_steps, freq_str):
-    # Data đã được resample ở bên ngoài
     if len(data) <= test_size: raise ValueError("Not enough data.")
         
     train = data.iloc[:-test_size]
@@ -106,14 +138,12 @@ def get_forecast(data, model_type, test_size, window_size, future_steps, freq_st
     info = ""
     warning_msg = None
 
-    # Xác định chu kỳ mùa vụ (Seasonal Period)
     sp = 1
     if freq_str == "DAILY": sp = 5
     elif freq_str == "MONTHLY": sp = 12
     elif freq_str == "QUARTERLY": sp = 4
 
     try:
-        # === NAIVE ===
         if model_type == "Naive":
             preds[:] = train.iloc[-1]
             if future_steps > 0:
@@ -121,7 +151,6 @@ def get_forecast(data, model_type, test_size, window_size, future_steps, freq_st
                 future_series = pd.Series([data.iloc[-1]]*len(dates), index=dates)
             info = "Naive"
 
-        # === MOVING AVERAGE ===
         elif model_type == "Moving Average":
             history = list(train.values)
             predictions = []
@@ -129,67 +158,50 @@ def get_forecast(data, model_type, test_size, window_size, future_steps, freq_st
                 yhat = np.mean(history[-window_size:])
                 predictions.append(yhat); history.append(test.iloc[t])
             preds[:] = predictions
-            
             if future_steps > 0:
                 dates = pd.date_range(start=data.index[-1], periods=future_steps+1, freq=data.index.freq)[1:]
                 last_ma = data.rolling(window=window_size).mean().iloc[-1]
                 future_series = pd.Series([last_ma]*len(dates), index=dates)
             info = f"MA({window_size})"
 
-        # === SES (Simple Exponential Smoothing) - Có dùng Optimize ===
         elif model_type == "SES":
-            # 1. Tìm tham số tốt nhất trên tập train
             best_alpha = optimize_params(train, 'SES')[0]
-            
-            # 2. Fit lại model để lấy dự báo test
             model = SimpleExpSmoothing(train).fit(smoothing_level=best_alpha, optimized=False)
             preds[:] = model.forecast(len(test)).values
-            
-            # 3. Future: Tối ưu lại trên TOÀN BỘ DATA (Giống Colab)
             if future_steps > 0:
-                best_alpha_full = optimize_params(data, 'SES')[0] # Tối ưu lại trên full data
+                best_alpha_full = optimize_params(data, 'SES')[0]
                 model_full = SimpleExpSmoothing(data).fit(smoothing_level=best_alpha_full, optimized=False)
-                
                 dates = pd.date_range(start=data.index[-1], periods=future_steps+1, freq=data.index.freq)[1:]
                 future_series = pd.Series(model_full.forecast(future_steps).values, index=dates)
             info = f"SES (α={best_alpha:.2f})"
 
-        # === HOLT (Double Exp) - Có dùng Optimize ===
         elif model_type == "Holt":
-            # 1. Tối ưu Alpha, Beta
             p = optimize_params(train, 'Holt')
             model = ExponentialSmoothing(train, trend='add', seasonal=None, damped_trend=True).fit(
                 smoothing_level=p[0], smoothing_trend=p[1], optimized=False)
             preds[:] = model.forecast(len(test)).values
-            
             if future_steps > 0:
                 p_full = optimize_params(data, 'Holt')
                 model_full = ExponentialSmoothing(data, trend='add', seasonal=None, damped_trend=True).fit(
                     smoothing_level=p_full[0], smoothing_trend=p_full[1], optimized=False)
-                
                 dates = pd.date_range(start=data.index[-1], periods=future_steps+1, freq=data.index.freq)[1:]
                 future_series = pd.Series(model_full.forecast(future_steps).values, index=dates)
             info = f"Holt (α={p[0]:.2f}, β={p[1]:.2f})"
 
-        # === HOLT-WINTERS - Có dùng Optimize ===
         elif model_type == "Holt-Winters":
             try:
-                # 1. Tối ưu Alpha, Beta, Gamma
                 p = optimize_params(train, 'HW', seasonal_periods=sp)
                 model = ExponentialSmoothing(train, trend='add', seasonal='add', seasonal_periods=sp).fit(
                     smoothing_level=p[0], smoothing_trend=p[1], smoothing_seasonal=p[2], optimized=False)
                 preds[:] = model.forecast(len(test)).values
-                
                 if future_steps > 0:
                     p_full = optimize_params(data, 'HW', seasonal_periods=sp)
                     model_full = ExponentialSmoothing(data, trend='add', seasonal='add', seasonal_periods=sp).fit(
                         smoothing_level=p_full[0], smoothing_trend=p_full[1], smoothing_seasonal=p_full[2], optimized=False)
-                    
                     dates = pd.date_range(start=data.index[-1], periods=future_steps+1, freq=data.index.freq)[1:]
                     future_series = pd.Series(model_full.forecast(future_steps).values, index=dates)
                 info = f"HW (sp={sp})"
             except:
-                # Fallback về Holt nếu dữ liệu quá ít chu kỳ
                 p = optimize_params(train, 'Holt')
                 model = ExponentialSmoothing(train, trend='add', seasonal=None, damped_trend=True).fit(
                     smoothing_level=p[0], smoothing_trend=p[1], optimized=False)
@@ -205,7 +217,7 @@ def get_forecast(data, model_type, test_size, window_size, future_steps, freq_st
     return train, test, preds, future_series, info, warning_msg
 
 # ==============================================================================
-# 4. GIAO DIỆN CHÍNH
+# 3. GIAO DIỆN CHÍNH
 # ==============================================================================
 st.markdown("<h1>PIXEL TRADER</h1>", unsafe_allow_html=True)
 st.markdown("<div style='text-align:center; color:#555; letter-spacing:4px; margin-bottom:30px; font-family:VT323'>COLAB ENGINE EDITION</div>", unsafe_allow_html=True)
@@ -230,7 +242,7 @@ with st.container():
 st.markdown("---")
 
 # ==============================================================================
-# 5. XỬ LÝ & HIỂN THỊ
+# 4. XỬ LÝ & HIỂN THỊ
 # ==============================================================================
 if btn_run:
     try:
@@ -241,13 +253,13 @@ if btn_run:
             
             if data is None or data.empty: st.error("❌ DATA NOT FOUND."); st.stop()
             
-            # 2. Resampling (Cực kỳ quan trọng để khớp Colab)
+            # 2. Resampling
             if freq_display == "MONTHLY":
-                data = data.resample('ME').last().dropna() # Dùng 'ME' cho pandas mới
+                data = data.resample('M').last().dropna()
             elif freq_display == "QUARTERLY":
-                data = data.resample('QE').last().dropna() # Dùng 'QE' cho pandas mới
+                data = data.resample('Q').last().dropna()
             else:
-                data = data.asfreq('B').fillna(method='ffill') # Daily Business Days
+                data = data.asfreq('B').fillna(method='ffill') 
 
             # 3. Chạy dự báo
             train, test, preds, fut, info, warn = get_forecast(data, model_display, test_size, window_size, future_steps, freq_display)
