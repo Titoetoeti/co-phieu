@@ -345,14 +345,24 @@ if btn_run or st.session_state.get('run_success', False):
             ))
 
             # Cấu hình giao diện biểu đồ (Dark Mode)
-            fig.update_layout(
+          fig.update_layout(
                 paper_bgcolor='rgba(0,0,0,0)',
                 plot_bgcolor='rgba(0,0,0,0)',
                 font=dict(family='Courier New, monospace', color='#ffffff'),
                 xaxis=dict(showgrid=True, gridcolor='#333333', tickfont=dict(color='#00ff41')),
                 yaxis=dict(showgrid=True, gridcolor='#333333', tickfont=dict(color='#ffffff')),
                 hovermode="x unified",
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                
+                # [THÊM MỚI] Cấu hình Legend cho biểu đồ trên cùng
+                legend=dict(
+                    orientation="h", 
+                    yanchor="bottom", 
+                    y=1.02, 
+                    xanchor="right", 
+                    x=1,
+                    font=dict(color="#ffffff", size=12), # <-- Ép màu chữ trắng sáng
+                    bgcolor="rgba(0,0,0,0.5)"            # <-- Thêm nền đen mờ
+                ),
                 margin=dict(l=0, r=0, t=30, b=0)
             )
 
@@ -439,4 +449,5 @@ else:
         </div>
         <style>@keyframes blinker { 50% { opacity: 0; } }</style>
     """, unsafe_allow_html=True)
+
 
