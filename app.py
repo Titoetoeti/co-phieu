@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import yfinance as yf
 from statsmodels.tsa.api import SimpleExpSmoothing, ExponentialSmoothing
 from sklearn.metrics import mean_squared_error, mean_absolute_percentage_error
+from scipy.optimize import minimize  # <--- VŨ KHÍ BÍ MẬT CỦA COLAB
 import warnings
 import time
 import base64
@@ -15,86 +16,75 @@ import os
 # 1. CẤU HÌNH & HÀM HỖ TRỢ
 # ==============================================================================
 warnings.filterwarnings("ignore")
-st.set_page_config(page_title="PIXEL TRADER (STATISTICS)", layout="wide", page_icon="📈")
+st.set_page_config(page_title="PIXEL TRADER (COLAB CORE)", layout="wide", page_icon="🧪")
 plt.style.use('dark_background') 
 
-# --- HÀM INTRO VIDEO ---
+# --- HÀM TỐI ƯU HÓA THAM SỐ (Trích xuất từ Colab) ---
+# Hàm này dùng thuật toán L-BFGS-B để tìm tham số 'ngon' nhất thay vì để máy tự chọn
+def optimize_params(data, model_type, seasonal_periods=None):
+    def loss_func(params):
+        try:
+            if model_type == 'SES':
+                # params[0] = alpha
+                model = SimpleExpSmoothing(data).fit(smoothing_level=params[0], optimized=False)
+            elif model_type == 'Holt':
+                # params[0]=alpha, params[1]=beta
+                model = ExponentialSmoothing(data, trend='add', seasonal=None, damped_trend=True).fit(
+                    smoothing_level=params[0], smoothing_trend=params[1], optimized=False)
+            elif model_type == 'HW': # Holt-Winters
+                # params[0]=alpha, params[1]=beta, params[2]=gamma
+                model = ExponentialSmoothing(data, trend='add', seasonal='add', seasonal_periods=seasonal_periods).fit(
+                    smoothing_level=params[0], smoothing_trend=params[1], smoothing_seasonal=params[2], optimized=False)
+            
+            # Trả về tổng bình phương sai số (càng nhỏ càng tốt)
+            return np.sum((data - model.fittedvalues)**2)
+        except:
+            return 1e10 # Phạt nặng nếu lỗi
+
+    # Ràng buộc tham số trong khoảng 0.01 đến 0.99 (Giống Colab)
+    bounds = [(0.01, 0.99)]
+    if model_type == 'Holt': bounds = [(0.01, 0.99), (0.01, 0.99)]
+    if model_type == 'HW': bounds = [(0.01, 0.99), (0.01, 0.99), (0.01, 0.99)]
+
+    # Giá trị khởi tạo
+    x0 = [0.5] * len(bounds)
+    
+    # Chạy tối ưu hóa
+    res = minimize(loss_func, x0, bounds=bounds, method='L-BFGS-B')
+    return res.x
+
+# --- INTRO VIDEO ---
 def show_intro_video(video_file, duration=8):
-    if 'intro_done' not in st.session_state:
-        st.session_state['intro_done'] = False
-
-    if st.session_state['intro_done']:
-        return
-
-    if not os.path.exists(video_file):
-        st.session_state['intro_done'] = True
-        return
-
+    if 'intro_done' not in st.session_state: st.session_state['intro_done'] = False
+    if st.session_state['intro_done']: return
+    if not os.path.exists(video_file): st.session_state['intro_done'] = True; return
     try:
-        with open(video_file, "rb") as f:
-            video_bytes = f.read()
-        video_str = base64.b64encode(video_bytes).decode()
-        
-        intro_html = f"""
-        <style>
-            .stApp {{ overflow: hidden; }}
-            #intro-overlay {{
-                position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-                background-color: #000000; z-index: 999999;
-                display: flex; justify-content: center; align-items: center;
-                flex-direction: column;
-            }}
-            #intro-video {{ width: 100%; height: 100%; object-fit: cover; }}
-            #skip-btn {{
-                position: absolute; bottom: 30px; right: 30px;
-                color: #00ff41; font-family: monospace; font-size: 16px;
-                z-index: 1000000; border: 1px solid #00ff41; padding: 10px;
-                background: black; opacity: 0.8;
-            }}
-        </style>
-        <div id="intro-overlay">
-            <video id="intro-video" autoplay muted playsinline>
-                <source src="data:video/mp4;base64,{video_str}" type="video/mp4">
-            </video>
-            <div id="skip-btn">LOADING STATISTICAL MODELS...</div>
-        </div>
-        """
-        placeholder = st.empty()
-        placeholder.markdown(intro_html, unsafe_allow_html=True)
-        time.sleep(duration)
-        placeholder.empty()
-        st.session_state['intro_done'] = True
-        st.rerun()
-
-    except Exception:
-        st.session_state['intro_done'] = True
+        with open(video_file, "rb") as f: v = base64.b64encode(f.read()).decode()
+        st.markdown(f"""<style>.stApp {{overflow:hidden}} #intro {{position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:999}}</style><div id="intro"><video style="width:100%;height:100%;object-fit:cover" autoplay muted playsinline><source src="data:video/mp4;base64,{v}" type="video/mp4"></video></div>""", unsafe_allow_html=True)
+        time.sleep(duration); st.empty(); st.session_state['intro_done'] = True; st.rerun()
+    except: st.session_state['intro_done'] = True
 
 show_intro_video("intro1.mp4", duration=6)
 
 # ==============================================================================
-# 2. CSS GIAO DIỆN (PIXEL STYLE)
+# 2. CSS GIAO DIỆN
 # ==============================================================================
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
         header[data-testid="stHeader"] { visibility: hidden; }
-        .block-container { padding-top: 2rem; }
         .stApp { background-color: #0d0d0d; color: #00ff41; font-family: 'VT323', monospace; font-size: 20px; }
         input { color: #ffffff !important; font-family: 'VT323', monospace !important; font-size: 22px !important; }
         div[data-baseweb="select"] > div { background-color: #000 !important; color: #ffffff !important; border-color: #00ff41 !important; }
-        div[data-baseweb="input"] > div { background-color: #000 !important; border: 2px solid #00ff41 !important; border-radius: 0px; }
-        div[data-baseweb="select"] svg { fill: #00ff41 !important; }
         label p { font-size: 18px !important; font-family: 'Press Start 2P', cursive !important; color: #00ff41 !important; }
-        h1 { font-family: 'Press Start 2P', cursive !important; text-align: center; color: #00ff41; text-shadow: 6px 6px 0px #003300; font-size: 60px !important; line-height: 1.2 !important; margin-bottom: 10px !important; margin-top: 0px !important; }
-        .sub-title { text-align: center; font-family: 'VT323'; font-size: 24px; color: #555; letter-spacing: 4px; margin-bottom: 30px; }
-        div.stButton > button { width: 100%; background-color: #000000 !important; color: #00ff41 !important; border: 2px solid #00ff41 !important; font-family: 'Press Start 2P', cursive !important; padding: 15px; margin-top: 15px; border-radius: 0px !important; transition: all 0.2s ease-in-out; box-shadow: none !important; }
-        div.stButton > button:hover { background-color: #00ff41 !important; color: #000000 !important; box-shadow: 0 0 15px #00ff41 !important; }
-        div.stButton > button:active { transform: scale(0.98); }
+        h1 { font-family: 'Press Start 2P'; text-align: center; color: #00ff41; font-size: 60px; }
+        div.stButton > button { width: 100%; background-color: #000; color: #00ff41; border: 2px solid #00ff41; font-family: 'Press Start 2P'; padding: 15px; }
+        div.stButton > button:hover { background-color: #00ff41; color: #000; box-shadow: 0 0 15px #00ff41; }
     </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 3. LOGIC TÍNH TOÁN (ĐÃ SỬA MONTHLY/QUARTERLY)
+# 3. LOGIC TÍNH TOÁN (CORE COLAB)
 # ==============================================================================
 
 def clean_yfinance_data(df):
@@ -104,23 +94,9 @@ def clean_yfinance_data(df):
     col = next((c for c in ['adj close', 'close', 'price'] if c in df.columns), df.columns[0])
     return df[col]
 
-# Hàm tạo ngày tương lai thông minh (theo ngày/tháng/quý)
-def generate_future_dates(last_date, periods, freq_str):
-    if freq_str == "DAILY":
-        return pd.bdate_range(start=last_date, periods=periods + 1)[1:]
-    elif freq_str == "MONTHLY":
-        # 'M' là cuối tháng
-        return pd.date_range(start=last_date, periods=periods + 1, freq='M')[1:]
-    elif freq_str == "QUARTERLY":
-        # 'Q' là cuối quý
-        return pd.date_range(start=last_date, periods=periods + 1, freq='Q')[1:]
-    return pd.bdate_range(start=last_date, periods=periods + 1)[1:]
-
 def get_forecast(data, model_type, test_size, window_size, future_steps, freq_str):
-    # Chia Train/Test
-    # Lưu ý: test_size ở đây hiểu là số "bước" (ngày/tháng/quý)
-    if len(data) <= test_size:
-        raise ValueError("Not enough data for backtesting.")
+    # Data đã được resample ở bên ngoài
+    if len(data) <= test_size: raise ValueError("Not enough data.")
         
     train = data.iloc[:-test_size]
     test = data.iloc[-test_size:]
@@ -130,79 +106,96 @@ def get_forecast(data, model_type, test_size, window_size, future_steps, freq_st
     info = ""
     warning_msg = None
 
-    try:
-        # === MÔ HÌNH 1: NAIVE ===
-        if model_type == "Naive":
-            last_val = train.iloc[-1]
-            preds[:] = last_val
-            
-            if future_steps > 0:
-                future_dates = generate_future_dates(data.index[-1], future_steps, freq_str)
-                future_series = pd.Series([data.iloc[-1]] * len(future_dates), index=future_dates)
-            info = "Naive Method"
+    # Xác định chu kỳ mùa vụ (Seasonal Period)
+    sp = 1
+    if freq_str == "DAILY": sp = 5
+    elif freq_str == "MONTHLY": sp = 12
+    elif freq_str == "QUARTERLY": sp = 4
 
-        # === MÔ HÌNH 2: MOVING AVERAGE ===
+    try:
+        # === NAIVE ===
+        if model_type == "Naive":
+            preds[:] = train.iloc[-1]
+            if future_steps > 0:
+                dates = pd.date_range(start=data.index[-1], periods=future_steps+1, freq=data.index.freq)[1:]
+                future_series = pd.Series([data.iloc[-1]]*len(dates), index=dates)
+            info = "Naive"
+
+        # === MOVING AVERAGE ===
         elif model_type == "Moving Average":
             history = list(train.values)
             predictions = []
             for t in range(len(test)):
                 yhat = np.mean(history[-window_size:])
-                predictions.append(yhat)
-                history.append(test.iloc[t])
+                predictions.append(yhat); history.append(test.iloc[t])
             preds[:] = predictions
             
             if future_steps > 0:
-                future_dates = generate_future_dates(data.index[-1], future_steps, freq_str)
+                dates = pd.date_range(start=data.index[-1], periods=future_steps+1, freq=data.index.freq)[1:]
                 last_ma = data.rolling(window=window_size).mean().iloc[-1]
-                future_series = pd.Series([last_ma] * len(future_dates), index=future_dates)
+                future_series = pd.Series([last_ma]*len(dates), index=dates)
             info = f"MA({window_size})"
 
-        # === MÔ HÌNH 3: SES ===
+        # === SES (Simple Exponential Smoothing) - Có dùng Optimize ===
         elif model_type == "SES":
-            model = SimpleExpSmoothing(train).fit(optimized=True)
+            # 1. Tìm tham số tốt nhất trên tập train
+            best_alpha = optimize_params(train, 'SES')[0]
+            
+            # 2. Fit lại model để lấy dự báo test
+            model = SimpleExpSmoothing(train).fit(smoothing_level=best_alpha, optimized=False)
             preds[:] = model.forecast(len(test)).values
             
+            # 3. Future: Tối ưu lại trên TOÀN BỘ DATA (Giống Colab)
             if future_steps > 0:
-                model_full = SimpleExpSmoothing(data).fit(optimized=True)
-                future_vals = model_full.forecast(future_steps).values
-                future_dates = generate_future_dates(data.index[-1], future_steps, freq_str)
-                future_series = pd.Series(future_vals, index=future_dates)
-            info = f"SES (alpha={model.params['smoothing_level']:.2f})"
+                best_alpha_full = optimize_params(data, 'SES')[0] # Tối ưu lại trên full data
+                model_full = SimpleExpSmoothing(data).fit(smoothing_level=best_alpha_full, optimized=False)
+                
+                dates = pd.date_range(start=data.index[-1], periods=future_steps+1, freq=data.index.freq)[1:]
+                future_series = pd.Series(model_full.forecast(future_steps).values, index=dates)
+            info = f"SES (α={best_alpha:.2f})"
 
-        # === MÔ HÌNH 4: HOLT ===
+        # === HOLT (Double Exp) - Có dùng Optimize ===
         elif model_type == "Holt":
-            model = ExponentialSmoothing(train, trend='add', seasonal=None).fit(optimized=True)
+            # 1. Tối ưu Alpha, Beta
+            p = optimize_params(train, 'Holt')
+            model = ExponentialSmoothing(train, trend='add', seasonal=None, damped_trend=True).fit(
+                smoothing_level=p[0], smoothing_trend=p[1], optimized=False)
             preds[:] = model.forecast(len(test)).values
             
             if future_steps > 0:
-                model_full = ExponentialSmoothing(data, trend='add', seasonal=None).fit(optimized=True)
-                future_vals = model_full.forecast(future_steps).values
-                future_dates = generate_future_dates(data.index[-1], future_steps, freq_str)
-                future_series = pd.Series(future_vals, index=future_dates)
-            info = "Holt's Linear"
+                p_full = optimize_params(data, 'Holt')
+                model_full = ExponentialSmoothing(data, trend='add', seasonal=None, damped_trend=True).fit(
+                    smoothing_level=p_full[0], smoothing_trend=p_full[1], optimized=False)
+                
+                dates = pd.date_range(start=data.index[-1], periods=future_steps+1, freq=data.index.freq)[1:]
+                future_series = pd.Series(model_full.forecast(future_steps).values, index=dates)
+            info = f"Holt (α={p[0]:.2f}, β={p[1]:.2f})"
 
-        # === MÔ HÌNH 5: HOLT-WINTERS ===
+        # === HOLT-WINTERS - Có dùng Optimize ===
         elif model_type == "Holt-Winters":
-            # Tự động điều chỉnh chu kỳ mùa vụ dựa trên Frequency
-            if freq_str == "DAILY": sp = 5
-            elif freq_str == "MONTHLY": sp = 12 # 1 năm
-            elif freq_str == "QUARTERLY": sp = 4 # 1 năm
-            
             try:
-                model = ExponentialSmoothing(train, trend='add', seasonal='add', seasonal_periods=sp).fit(optimized=True)
+                # 1. Tối ưu Alpha, Beta, Gamma
+                p = optimize_params(train, 'HW', seasonal_periods=sp)
+                model = ExponentialSmoothing(train, trend='add', seasonal='add', seasonal_periods=sp).fit(
+                    smoothing_level=p[0], smoothing_trend=p[1], smoothing_seasonal=p[2], optimized=False)
                 preds[:] = model.forecast(len(test)).values
                 
                 if future_steps > 0:
-                    model_full = ExponentialSmoothing(data, trend='add', seasonal='add', seasonal_periods=sp).fit(optimized=True)
-                    future_vals = model_full.forecast(future_steps).values
-                    future_dates = generate_future_dates(data.index[-1], future_steps, freq_str)
-                    future_series = pd.Series(future_vals, index=future_dates)
-                info = f"Holt-Winters (sp={sp})"
+                    p_full = optimize_params(data, 'HW', seasonal_periods=sp)
+                    model_full = ExponentialSmoothing(data, trend='add', seasonal='add', seasonal_periods=sp).fit(
+                        smoothing_level=p_full[0], smoothing_trend=p_full[1], smoothing_seasonal=p_full[2], optimized=False)
+                    
+                    dates = pd.date_range(start=data.index[-1], periods=future_steps+1, freq=data.index.freq)[1:]
+                    future_series = pd.Series(model_full.forecast(future_steps).values, index=dates)
+                info = f"HW (sp={sp})"
             except:
-                model = ExponentialSmoothing(train, trend='add', seasonal=None).fit(optimized=True)
+                # Fallback về Holt nếu dữ liệu quá ít chu kỳ
+                p = optimize_params(train, 'Holt')
+                model = ExponentialSmoothing(train, trend='add', seasonal=None, damped_trend=True).fit(
+                    smoothing_level=p[0], smoothing_trend=p[1], optimized=False)
                 preds[:] = model.forecast(len(test)).values
                 info = "Holt (Fallback)"
-                warning_msg = "HW Failed -> Holt"
+                warning_msg = "Not enough data for HW -> Switched to Holt"
 
     except Exception as e:
         info = "ERROR"
@@ -214,248 +207,95 @@ def get_forecast(data, model_type, test_size, window_size, future_steps, freq_st
 # ==============================================================================
 # 4. GIAO DIỆN CHÍNH
 # ==============================================================================
-
-if 'vs_mode' not in st.session_state: st.session_state.vs_mode = False
-
 st.markdown("<h1>PIXEL TRADER</h1>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>STATISTICAL EDITION</div>", unsafe_allow_html=True)
+st.markdown("<div style='text-align:center; color:#555; letter-spacing:4px; margin-bottom:30px; font-family:VT323'>COLAB ENGINE EDITION</div>", unsafe_allow_html=True)
 
 with st.container():
     c1, c2, c3 = st.columns([1, 3, 1]) 
     with c2:
-        ticker = st.text_input("ENTER TICKER (e.g., AAPL)", value="AAPL").upper()
-        col_inp1, col_inp2 = st.columns(2)
-        with col_inp1: 
-            # [SỬA LẠI] Đã thêm Monthly và Quarterly
-            freq_display = st.selectbox("TIMEFRAME", ("DAILY", "MONTHLY", "QUARTERLY"))
-        with col_inp2: 
-            model_display = st.selectbox("MODEL", ("Naive", "Moving Average", "SES", "Holt", "Holt-Winters"))
+        ticker = st.text_input("ENTER TICKER", value="AAPL").upper()
+        c_in1, c_in2 = st.columns(2)
+        with c_in1: freq_display = st.selectbox("TIMEFRAME", ("DAILY", "MONTHLY", "QUARTERLY"))
+        with c_in2: model_display = st.selectbox("MODEL", ("Naive", "Moving Average", "SES", "Holt", "Holt-Winters"))
             
         with st.expander("⚙️ ADVANCED SETTINGS"):
-            # [SỬA LẠI] Chỉ hiện Window Size nếu chọn Moving Average
-            if model_display == "Moving Average":
-                window_size = st.slider("WINDOW SIZE (MA)", 2, 50, 20)
-            else:
-                window_size = 20 # Giá trị mặc định ẩn
-                
-            test_size = st.slider("BACKTEST SIZE (Steps)", 5, 60, 20)
-            # Future Forecast hiểu theo đơn vị thời gian (Ngày/Tháng/Quý)
-            future_steps = st.slider(f"FUTURE FORECAST ({freq_display})", 4, 60, 12)
+            if model_display == "Moving Average": window_size = st.slider("WINDOW SIZE", 2, 50, 20)
+            else: window_size = 20
+            test_size = st.slider("BACKTEST STEPS", 5, 60, 12)
+            future_steps = st.slider(f"FORECAST STEPS", 4, 60, 6)
         
         st.write("") 
-        btn_run = st.button(">> START PREDICTION <<")
+        btn_run = st.button(">> RUN PREDICTION <<")
 
 st.markdown("---")
 
 # ==============================================================================
 # 5. XỬ LÝ & HIỂN THỊ
 # ==============================================================================
-
-if btn_run: st.session_state.vs_mode = False
-
-if btn_run or st.session_state.get('run_success', False):
-    st.session_state.run_success = True
-    
+if btn_run:
     try:
-        with st.spinner(f"LOADING DATA: {ticker}..."):
-            # 1. Tải Daily Data (Cố định 2020-2025)
+        with st.spinner(f"PROCESSING {ticker} (Using Colab Algorithms)..."):
+            # 1. Load Data
             df = yf.download(ticker, start="2020-11-23", end="2025-11-21", progress=False)
             data = clean_yfinance_data(df)
             
-            if data is None or data.empty: 
-                st.error("❌ DATA NOT FOUND."); st.stop()
+            if data is None or data.empty: st.error("❌ DATA NOT FOUND."); st.stop()
             
-            # [QUAN TRỌNG] Resample dữ liệu theo yêu cầu (Tháng/Quý)
+            # 2. Resampling (Cực kỳ quan trọng để khớp Colab)
             if freq_display == "MONTHLY":
-                # Resample lấy giá cuối tháng
-                data = data.resample('M').last().dropna()
+                data = data.resample('ME').last().dropna() # Dùng 'ME' cho pandas mới
             elif freq_display == "QUARTERLY":
-                # Resample lấy giá cuối quý
-                data = data.resample('Q').last().dropna()
+                data = data.resample('QE').last().dropna() # Dùng 'QE' cho pandas mới
             else:
-                data = data.dropna() # Daily giữ nguyên
+                data = data.asfreq('B').fillna(method='ffill') # Daily Business Days
 
-            # GỌI HÀM DỰ BÁO (Truyền thêm freq_display)
-            train, test, preds, future_series, info, warning_msg = get_forecast(data, model_display, test_size, window_size, future_steps, freq_display)
+            # 3. Chạy dự báo
+            train, test, preds, fut, info, warn = get_forecast(data, model_display, test_size, window_size, future_steps, freq_display)
 
-            # Tính toán lỗi
+            # Tính lỗi
             mask = ~np.isnan(preds) & ~np.isnan(test)
-            rmse = np.sqrt(mean_squared_error(test[mask], preds[mask])) if mask.sum() > 0 else 0
-            mape = mean_absolute_percentage_error(test[mask], preds[mask]) * 100 if mask.sum() > 0 else 0
+            rmse = np.sqrt(mean_squared_error(test[mask], preds[mask])) if mask.sum()>0 else 0
+            mape = mean_absolute_percentage_error(test[mask], preds[mask])*100 if mask.sum()>0 else 0
 
-            if warning_msg: st.warning(f"⚠️ SYSTEM WARNING: {warning_msg}")
+            if warn: st.warning(f"⚠️ {warn}")
 
-            # --- MARKET STATS ---
-            st.markdown(f"<div style='text-align:center; font-family:\"Press Start 2P\"; color:#00ff41; margin-bottom:10px'>TARGET: {ticker} ({freq_display})</div>", unsafe_allow_html=True)
-            
-            current_price = test.iloc[-1]
-            if not future_series.empty:
-                final_predicted_price = future_series.iloc[-1]
-            else:
-                final_predicted_price = preds.iloc[-1]
+            # Stats
+            cur_price = test.iloc[-1]
+            fut_price = fut.iloc[-1] if not fut.empty else preds.iloc[-1]
+            trend_pct = ((fut_price - cur_price)/cur_price)*100
+            color = "#00ff41" if trend_pct>=0 else "#ff3333"
 
-            if not np.isnan(final_predicted_price):
-                trend_pct = ((final_predicted_price - current_price) / current_price) * 100
-            else: trend_pct = 0.0
-            
-            trend_color = "#00ff41" if trend_pct >= 0 else "#ff3333"
-            trend_arrow = "▲" if trend_pct >= 0 else "▼"
+            s1, s2, s3 = st.columns(3)
+            box = "border:1px solid #fff; padding:10px; text-align:center; margin-bottom:20px; background:rgba(255,255,255,0.05)"
+            s1.markdown(f"<div style='{box}; border-color:#aaa'><div style='font-size:12px; color:#aaa'>CURRENT</div><div style='font-size:30px'>${cur_price:,.2f}</div></div>", unsafe_allow_html=True)
+            s2.markdown(f"<div style='{box}; border-color:#f0f'><div style='font-size:12px; color:#f0f'>TARGET</div><div style='font-size:30px'>${fut_price:,.2f}</div></div>", unsafe_allow_html=True)
+            s3.markdown(f"<div style='{box}; border-color:{color}'><div style='font-size:12px; color:{color}'>GROWTH</div><div style='font-size:30px'>{trend_pct:+.2f}%</div></div>", unsafe_allow_html=True)
 
-            stat1, stat2, stat3 = st.columns(3)
-            stat_box_style = "border:2px solid #fff; padding:10px; text-align:center; background: rgba(255,255,255,0.05); margin-bottom: 20px;"
-            stat_label = "font-family: 'Press Start 2P'; font-size: 12px; color: #aaa; margin-bottom: 8px;"
-            stat_val = "font-family: 'VT323'; font-size: 36px; line-height: 1; color: #fff;"
-
-            stat1.markdown(f"<div style='{stat_box_style} border-color: #aaa;'><div style='{stat_label}'>CURRENT PRICE</div><div style='{stat_val}'>${current_price:,.2f}</div></div>", unsafe_allow_html=True)
-            stat2.markdown(f"<div style='{stat_box_style} border-color: #ff00ff;'><div style='{stat_label} color:#ff00ff;'>TARGET ({freq_display})</div><div style='{stat_val} color:#ff00ff;'>${final_predicted_price:,.2f}</div></div>", unsafe_allow_html=True)
-            stat3.markdown(f"<div style='{stat_box_style} border-color: {trend_color};'><div style='{stat_label} color:{trend_color};'>FORECAST</div><div style='{stat_val} color:{trend_color};'>{trend_arrow} {abs(trend_pct):.2f}%</div></div>", unsafe_allow_html=True)
-
-            # --- METRICS ---
-            c_m1, c_m2, c_m3 = st.columns(3)
-            box_style = "border:2px solid #00ff41; padding:10px; text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;"
-            
-            c_m1.markdown(f"<div style='{box_style}'><div style='font-family: \"Press Start 2P\"; font-size: 14px; margin-bottom: 5px; color: #00ff41;'>RMSE</div><div style='font-family: \"VT323\"; font-size: 40px; color: #ffffff;'>{rmse:.2f}</div></div>", unsafe_allow_html=True)
-            c_m2.markdown(f"<div style='{box_style}'><div style='font-family: \"Press Start 2P\"; font-size: 14px; margin-bottom: 5px; color: #00ff41;'>MAPE</div><div style='font-family: \"VT323\"; font-size: 40px; color: #ffffff;'>{mape:.2f}%</div></div>", unsafe_allow_html=True)
-            c_m3.markdown(f"<div style='border:2px solid #00ffff; padding:10px; text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;'><div style='font-family: \"Press Start 2P\"; font-size: 14px; margin-bottom: 5px; color: #00ffff;'>MODEL</div><div style='font-family: \"VT323\"; font-size: 35px; color: #ffffff;'>{info}</div></div>", unsafe_allow_html=True)
-
-            st.write("")
-            
-            # ==================================================================
-            # BIỂU ĐỒ (Đã bao gồm Legend Fix + Future Forecast)
-            # ==================================================================
+            # Biểu đồ
             fig = go.Figure()
-
-            # 1. History
-            fig.add_trace(go.Scatter(
-                x=data.index, y=data.values,
-                mode='lines', name='HISTORY',
-                line=dict(color='#555555', width=1.5)
-            ))
-
-            # 2. Actual Test
-            fig.add_trace(go.Scatter(
-                x=test.index, y=test.values,
-                mode='lines', name='ACTUAL',
-                line=dict(color='#00ff41', width=2)
-            ))
-
-            # 3. Forecast Backtest
-            fig.add_trace(go.Scatter(
-                x=preds.index, y=preds.values,
-                mode='lines', name='BACKTEST',
-                line=dict(color='#ff00ff', width=2, dash='dot')
-            ))
-
-            # 4. Future
-            if not future_series.empty:
-                # Label thay đổi theo timeframe
-                future_label = f'FUTURE (+{future_steps} {freq_display})'
-                fig.add_trace(go.Scatter(
-                    x=future_series.index, y=future_series.values,
-                    mode='lines+markers', name=future_label,
-                    line=dict(color='#ffff00', width=3),
-                    marker=dict(size=4, symbol='star')
-                ))
+            fig.add_trace(go.Scatter(x=data.index, y=data.values, name='HISTORY', line=dict(color='#555')))
+            fig.add_trace(go.Scatter(x=test.index, y=test.values, name='ACTUAL', line=dict(color='#00ff41', width=2)))
+            fig.add_trace(go.Scatter(x=preds.index, y=preds.values, name='BACKTEST', line=dict(color='#f0f', width=2, dash='dot')))
+            
+            if not fut.empty:
+                fig.add_trace(go.Scatter(x=fut.index, y=fut.values, name='FUTURE', mode='lines+markers', 
+                                         line=dict(color='#ff0', width=3), marker=dict(symbol='star', size=6)))
 
             fig.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                font=dict(family='Courier New, monospace', color='#ffffff'),
-                xaxis=dict(showgrid=True, gridcolor='#333333', tickfont=dict(color='#00ff41')),
-                yaxis=dict(showgrid=True, gridcolor='#333333', tickfont=dict(color='#ffffff')),
-                hovermode="x unified",
-                legend=dict(
-                    orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
-                    font=dict(color="#ffffff", size=12), bgcolor="rgba(0,0,0,0.5)"
-                ),
-                margin=dict(l=0, r=0, t=30, b=0)
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(family='Courier New', color='#fff'),
+                xaxis=dict(gridcolor='#333'), yaxis=dict(gridcolor='#333'),
+                legend=dict(orientation="h", y=1.1)
             )
-
             st.plotly_chart(fig, use_container_width=True)
             
-            if not future_series.empty:
-                with st.expander("📋 VIEW FUTURE PRICES"):
-                    st.dataframe(future_series.to_frame(name="Predicted Price").T)
+            # Metrics
+            m1, m2, m3 = st.columns(3)
+            m1.info(f"RMSE: {rmse:.2f}"); m2.info(f"MAPE: {mape:.2f}%"); m3.success(f"MODEL: {info}")
 
-            # --- VS MODE ---
-            st.markdown("---")
-            st.markdown("<h3 style='text-align:center; color:#ffcc00; font-family:\"Press Start 2P\"'>VS MODE</h3>", unsafe_allow_html=True)
-            
-            c_vs1, c_vs2, c_vs3 = st.columns([1, 2, 1])
-            with c_vs2:
-                rivals_input = st.text_input("ENTER RIVALS", value="AAPL, MSFT, GOOG")
-                st.write("")
-                btn_fight = st.button(">> START COMPARISON <<")
-
-            if btn_fight:
-                rivals = [r.strip().upper() for r in rivals_input.split(",") if r.strip()]
-                all_tickers = [ticker] + rivals[:3] 
-                results_map = {}
-                progress_bar = st.progress(0)
-                
-                for i, t in enumerate(all_tickers):
-                    try:
-                        # [FIX] Dùng cùng khung thời gian 2020-2025
-                        d_t = yf.download(t, start="2020-11-23", end="2025-11-21", progress=False)
-                        val = clean_yfinance_data(d_t)
-                        if val is not None and not val.empty:
-                            # Resample cho đối thủ luôn
-                            if freq_display == "MONTHLY":
-                                val = val.resample('M').last().dropna()
-                            elif freq_display == "QUARTERLY":
-                                val = val.resample('Q').last().dropna()
-                            else:
-                                val = val.dropna()
-
-                            _, _, pred_t, _, _, _ = get_forecast(val, model_display, test_size, window_size, future_steps=0, freq_str=freq_display)
-                            if not pred_t.isna().all(): results_map[t] = pred_t
-                    except Exception: pass
-                    progress_bar.progress((i + 1) / len(all_tickers))
-                progress_bar.empty()
-
-                if len(results_map) > 0:
-                    fig2 = go.Figure()
-                    colors = ['#00ff41', '#ff00ff', '#00ffff', '#ffcc00', '#ff3333']
+            if not fut.empty:
+                with st.expander("📋 VIEW FUTURE DATA"):
+                    st.dataframe(fut.to_frame("Forecast").T)
                     
-                    for idx, (t_name, pred_series) in enumerate(results_map.items()):
-                        if len(pred_series) > 0:
-                            start_val = pred_series.iloc[0]
-                            if not np.isnan(start_val) and start_val != 0:
-                                pct_change = ((pred_series - start_val) / start_val) * 100
-                                width_line = 4 if t_name == ticker else 2
-                                dash_style = 'solid' if t_name == ticker else 'dot'
-                                line_color = colors[idx % len(colors)]
-                                
-                                fig2.add_trace(go.Scatter(
-                                    x=pred_series.index,
-                                    y=pct_change,
-                                    mode='lines',
-                                    name=f"{t_name}",
-                                    line=dict(color=line_color, width=width_line, dash=dash_style)
-                                ))
-
-                    fig2.update_layout(
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        plot_bgcolor='rgba(0,0,0,0)',
-                        font=dict(family='Courier New, monospace', color='#ffffff'),
-                        xaxis=dict(showgrid=True, gridcolor='#333333', tickfont=dict(color='#ffffff')),
-                        yaxis=dict(showgrid=True, gridcolor='#333333', title="Growth %", tickfont=dict(color='#ffffff')),
-                        hovermode="x unified",
-                        legend=dict(
-                            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
-                            font=dict(color="#ffffff", size=12), bgcolor="rgba(0,0,0,0.5)"
-                        )
-                    )
-                    st.plotly_chart(fig2, use_container_width=True)
-                else: st.warning("No valid data found for comparison.")
-
     except Exception as e:
         st.error(f"SYSTEM ERROR: {e}")
-
-else:
-    st.markdown("""
-        <div style='text-align: center; margin-top: 50px; font-family: "Press Start 2P"; color: #00ff41; animation: blinker 1s step-end infinite;'>
-            STATISTICAL MODELS READY...<br>[ WAITING FOR INPUT ]
-        </div>
-        <style>@keyframes blinker { 50% { opacity: 0; } }</style>
-    """, unsafe_allow_html=True)
