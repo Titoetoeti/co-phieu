@@ -94,7 +94,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 3. LOGIC TÍNH TOÁN (CODE 2: STATISTICAL MODELS)
+# 3. LOGIC TÍNH TOÁN (ĐÃ SỬA MONTHLY/QUARTERLY)
 # ==============================================================================
 
 def clean_yfinance_data(df):
@@ -104,8 +104,24 @@ def clean_yfinance_data(df):
     col = next((c for c in ['adj close', 'close', 'price'] if c in df.columns), df.columns[0])
     return df[col]
 
-def get_forecast(data, model_type, test_size, window_size, future_days=0):
+# Hàm tạo ngày tương lai thông minh (theo ngày/tháng/quý)
+def generate_future_dates(last_date, periods, freq_str):
+    if freq_str == "DAILY":
+        return pd.bdate_range(start=last_date, periods=periods + 1)[1:]
+    elif freq_str == "MONTHLY":
+        # 'M' là cuối tháng
+        return pd.date_range(start=last_date, periods=periods + 1, freq='M')[1:]
+    elif freq_str == "QUARTERLY":
+        # 'Q' là cuối quý
+        return pd.date_range(start=last_date, periods=periods + 1, freq='Q')[1:]
+    return pd.bdate_range(start=last_date, periods=periods + 1)[1:]
+
+def get_forecast(data, model_type, test_size, window_size, future_steps, freq_str):
     # Chia Train/Test
+    # Lưu ý: test_size ở đây hiểu là số "bước" (ngày/tháng/quý)
+    if len(data) <= test_size:
+        raise ValueError("Not enough data for backtesting.")
+        
     train = data.iloc[:-test_size]
     test = data.iloc[-test_size:]
     
@@ -115,74 +131,74 @@ def get_forecast(data, model_type, test_size, window_size, future_days=0):
     warning_msg = None
 
     try:
-        # === MÔ HÌNH 1: NAIVE (Ngây thơ) ===
+        # === MÔ HÌNH 1: NAIVE ===
         if model_type == "Naive":
-            # Dự báo bằng giá trị cuối cùng của tập train
             last_val = train.iloc[-1]
             preds[:] = last_val
             
-            if future_days > 0:
-                future_dates = pd.bdate_range(start=data.index[-1], periods=future_days + 1)[1:]
+            if future_steps > 0:
+                future_dates = generate_future_dates(data.index[-1], future_steps, freq_str)
                 future_series = pd.Series([data.iloc[-1]] * len(future_dates), index=future_dates)
             info = "Naive Method"
 
-        # === MÔ HÌNH 2: MOVING AVERAGE (Trung bình trượt) ===
+        # === MÔ HÌNH 2: MOVING AVERAGE ===
         elif model_type == "Moving Average":
-            # Dự báo bằng trung bình của N ngày gần nhất
             history = list(train.values)
             predictions = []
             for t in range(len(test)):
                 yhat = np.mean(history[-window_size:])
                 predictions.append(yhat)
-                history.append(test.iloc[t]) # Walk-forward
+                history.append(test.iloc[t])
             preds[:] = predictions
             
-            if future_days > 0:
-                future_dates = pd.bdate_range(start=data.index[-1], periods=future_days + 1)[1:]
+            if future_steps > 0:
+                future_dates = generate_future_dates(data.index[-1], future_steps, freq_str)
                 last_ma = data.rolling(window=window_size).mean().iloc[-1]
                 future_series = pd.Series([last_ma] * len(future_dates), index=future_dates)
             info = f"MA({window_size})"
 
-        # === MÔ HÌNH 3: SES (Simple Exponential Smoothing) ===
+        # === MÔ HÌNH 3: SES ===
         elif model_type == "SES":
             model = SimpleExpSmoothing(train).fit(optimized=True)
             preds[:] = model.forecast(len(test)).values
             
-            if future_days > 0:
+            if future_steps > 0:
                 model_full = SimpleExpSmoothing(data).fit(optimized=True)
-                future_vals = model_full.forecast(future_days).values
-                future_dates = pd.bdate_range(start=data.index[-1], periods=future_days + 1)[1:]
+                future_vals = model_full.forecast(future_steps).values
+                future_dates = generate_future_dates(data.index[-1], future_steps, freq_str)
                 future_series = pd.Series(future_vals, index=future_dates)
             info = f"SES (alpha={model.params['smoothing_level']:.2f})"
 
-        # === MÔ HÌNH 4: HOLT (Double Exp Smoothing - Trend) ===
+        # === MÔ HÌNH 4: HOLT ===
         elif model_type == "Holt":
             model = ExponentialSmoothing(train, trend='add', seasonal=None).fit(optimized=True)
             preds[:] = model.forecast(len(test)).values
             
-            if future_days > 0:
+            if future_steps > 0:
                 model_full = ExponentialSmoothing(data, trend='add', seasonal=None).fit(optimized=True)
-                future_vals = model_full.forecast(future_days).values
-                future_dates = pd.bdate_range(start=data.index[-1], periods=future_days + 1)[1:]
+                future_vals = model_full.forecast(future_steps).values
+                future_dates = generate_future_dates(data.index[-1], future_steps, freq_str)
                 future_series = pd.Series(future_vals, index=future_dates)
             info = "Holt's Linear"
 
-        # === MÔ HÌNH 5: HOLT-WINTERS (Triple Exp Smoothing - Seasonal) ===
+        # === MÔ HÌNH 5: HOLT-WINTERS ===
         elif model_type == "Holt-Winters":
-            # Tự động chọn chu kỳ (seasonal_periods)
-            sp = 5 # Mặc định tuần làm việc 5 ngày
+            # Tự động điều chỉnh chu kỳ mùa vụ dựa trên Frequency
+            if freq_str == "DAILY": sp = 5
+            elif freq_str == "MONTHLY": sp = 12 # 1 năm
+            elif freq_str == "QUARTERLY": sp = 4 # 1 năm
+            
             try:
                 model = ExponentialSmoothing(train, trend='add', seasonal='add', seasonal_periods=sp).fit(optimized=True)
                 preds[:] = model.forecast(len(test)).values
                 
-                if future_days > 0:
+                if future_steps > 0:
                     model_full = ExponentialSmoothing(data, trend='add', seasonal='add', seasonal_periods=sp).fit(optimized=True)
-                    future_vals = model_full.forecast(future_days).values
-                    future_dates = pd.bdate_range(start=data.index[-1], periods=future_days + 1)[1:]
+                    future_vals = model_full.forecast(future_steps).values
+                    future_dates = generate_future_dates(data.index[-1], future_steps, freq_str)
                     future_series = pd.Series(future_vals, index=future_dates)
                 info = f"Holt-Winters (sp={sp})"
             except:
-                # Fallback về Holt nếu lỗi
                 model = ExponentialSmoothing(train, trend='add', seasonal=None).fit(optimized=True)
                 preds[:] = model.forecast(len(test)).values
                 info = "Holt (Fallback)"
@@ -210,15 +226,21 @@ with st.container():
         ticker = st.text_input("ENTER TICKER (e.g., AAPL)", value="AAPL").upper()
         col_inp1, col_inp2 = st.columns(2)
         with col_inp1: 
-            freq_display = st.selectbox("TIMEFRAME", ("DAILY",))
+            # [SỬA LẠI] Đã thêm Monthly và Quarterly
+            freq_display = st.selectbox("TIMEFRAME", ("DAILY", "MONTHLY", "QUARTERLY"))
         with col_inp2: 
-            # Danh sách mô hình của Code 2
             model_display = st.selectbox("MODEL", ("Naive", "Moving Average", "SES", "Holt", "Holt-Winters"))
             
         with st.expander("⚙️ ADVANCED SETTINGS"):
-            window_size = st.slider("WINDOW SIZE (MA)", 2, 50, 20)
-            test_size = st.slider("BACKTEST SIZE", 5, 60, 20)
-            future_days = st.slider("FUTURE FORECAST (DAYS)", 7, 90, 30)
+            # [SỬA LẠI] Chỉ hiện Window Size nếu chọn Moving Average
+            if model_display == "Moving Average":
+                window_size = st.slider("WINDOW SIZE (MA)", 2, 50, 20)
+            else:
+                window_size = 20 # Giá trị mặc định ẩn
+                
+            test_size = st.slider("BACKTEST SIZE (Steps)", 5, 60, 20)
+            # Future Forecast hiểu theo đơn vị thời gian (Ngày/Tháng/Quý)
+            future_steps = st.slider(f"FUTURE FORECAST ({freq_display})", 4, 60, 12)
         
         st.write("") 
         btn_run = st.button(">> START PREDICTION <<")
@@ -236,15 +258,25 @@ if btn_run or st.session_state.get('run_success', False):
     
     try:
         with st.spinner(f"LOADING DATA: {ticker}..."):
-            # [FIX] Cố định thời gian như yêu cầu
+            # 1. Tải Daily Data (Cố định 2020-2025)
             df = yf.download(ticker, start="2020-11-23", end="2025-11-21", progress=False)
             data = clean_yfinance_data(df)
             
-            if data is None or data.empty: st.error("❌ DATA NOT FOUND."); st.stop()
-            data = data.dropna()
+            if data is None or data.empty: 
+                st.error("❌ DATA NOT FOUND."); st.stop()
+            
+            # [QUAN TRỌNG] Resample dữ liệu theo yêu cầu (Tháng/Quý)
+            if freq_display == "MONTHLY":
+                # Resample lấy giá cuối tháng
+                data = data.resample('M').last().dropna()
+            elif freq_display == "QUARTERLY":
+                # Resample lấy giá cuối quý
+                data = data.resample('Q').last().dropna()
+            else:
+                data = data.dropna() # Daily giữ nguyên
 
-            # GỌI HÀM DỰ BÁO
-            train, test, preds, future_series, info, warning_msg = get_forecast(data, model_display, test_size, window_size, future_days)
+            # GỌI HÀM DỰ BÁO (Truyền thêm freq_display)
+            train, test, preds, future_series, info, warning_msg = get_forecast(data, model_display, test_size, window_size, future_steps, freq_display)
 
             # Tính toán lỗi
             mask = ~np.isnan(preds) & ~np.isnan(test)
@@ -254,7 +286,7 @@ if btn_run or st.session_state.get('run_success', False):
             if warning_msg: st.warning(f"⚠️ SYSTEM WARNING: {warning_msg}")
 
             # --- MARKET STATS ---
-            st.markdown(f"<div style='text-align:center; font-family:\"Press Start 2P\"; color:#00ff41; margin-bottom:10px'>TARGET: {ticker}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align:center; font-family:\"Press Start 2P\"; color:#00ff41; margin-bottom:10px'>TARGET: {ticker} ({freq_display})</div>", unsafe_allow_html=True)
             
             current_price = test.iloc[-1]
             if not future_series.empty:
@@ -275,7 +307,7 @@ if btn_run or st.session_state.get('run_success', False):
             stat_val = "font-family: 'VT323'; font-size: 36px; line-height: 1; color: #fff;"
 
             stat1.markdown(f"<div style='{stat_box_style} border-color: #aaa;'><div style='{stat_label}'>CURRENT PRICE</div><div style='{stat_val}'>${current_price:,.2f}</div></div>", unsafe_allow_html=True)
-            stat2.markdown(f"<div style='{stat_box_style} border-color: #ff00ff;'><div style='{stat_label} color:#ff00ff;'>TARGET PRICE</div><div style='{stat_val} color:#ff00ff;'>${final_predicted_price:,.2f}</div></div>", unsafe_allow_html=True)
+            stat2.markdown(f"<div style='{stat_box_style} border-color: #ff00ff;'><div style='{stat_label} color:#ff00ff;'>TARGET ({freq_display})</div><div style='{stat_val} color:#ff00ff;'>${final_predicted_price:,.2f}</div></div>", unsafe_allow_html=True)
             stat3.markdown(f"<div style='{stat_box_style} border-color: {trend_color};'><div style='{stat_label} color:{trend_color};'>FORECAST</div><div style='{stat_val} color:{trend_color};'>{trend_arrow} {abs(trend_pct):.2f}%</div></div>", unsafe_allow_html=True)
 
             # --- METRICS ---
@@ -316,9 +348,11 @@ if btn_run or st.session_state.get('run_success', False):
 
             # 4. Future
             if not future_series.empty:
+                # Label thay đổi theo timeframe
+                future_label = f'FUTURE (+{future_steps} {freq_display})'
                 fig.add_trace(go.Scatter(
                     x=future_series.index, y=future_series.values,
-                    mode='lines+markers', name=f'FUTURE ({future_days}D)',
+                    mode='lines+markers', name=future_label,
                     line=dict(color='#ffff00', width=3),
                     marker=dict(size=4, symbol='star')
                 ))
@@ -365,8 +399,15 @@ if btn_run or st.session_state.get('run_success', False):
                         d_t = yf.download(t, start="2020-11-23", end="2025-11-21", progress=False)
                         val = clean_yfinance_data(d_t)
                         if val is not None and not val.empty:
-                            val = val.dropna()
-                            _, _, pred_t, _, _, _ = get_forecast(val, model_display, test_size, window_size, future_days=0)
+                            # Resample cho đối thủ luôn
+                            if freq_display == "MONTHLY":
+                                val = val.resample('M').last().dropna()
+                            elif freq_display == "QUARTERLY":
+                                val = val.resample('Q').last().dropna()
+                            else:
+                                val = val.dropna()
+
+                            _, _, pred_t, _, _, _ = get_forecast(val, model_display, test_size, window_size, future_steps=0, freq_str=freq_display)
                             if not pred_t.isna().all(): results_map[t] = pred_t
                     except Exception: pass
                     progress_bar.progress((i + 1) / len(all_tickers))
