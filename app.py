@@ -6,10 +6,12 @@ import matplotlib.pyplot as plt
 import yfinance as yf
 from statsmodels.tsa.api import SimpleExpSmoothing, ExponentialSmoothing
 from sklearn.metrics import mean_squared_error, mean_absolute_percentage_error
+from scipy.optimize import minimize 
 import warnings
 import time
 import base64
 import os
+import gc
 
 # ==============================================================================
 # 1. CẤU HÌNH & HÀM HỖ TRỢ
@@ -64,6 +66,9 @@ def show_intro_video(video_file, duration=8):
         time.sleep(duration)
         placeholder.empty()
         st.session_state['intro_done'] = True
+        # Dọn dẹp bộ nhớ sau khi video chạy xong
+        del video_bytes, video_str
+        gc.collect()
         st.rerun()
 
     except Exception:
@@ -94,8 +99,39 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 3. LOGIC TÍNH TOÁN (ĐÃ SỬA MONTHLY/QUARTERLY)
+# 3. LOGIC TÍNH TOÁN (ĐÃ TỐI ƯU HÓA THEO COLAB)
 # ==============================================================================
+
+# [MỚI] Hàm tối ưu hóa tham số (Giống hệt cách chạy trên Colab)
+def optimize_params(data, model_type, seasonal_periods=None):
+    def loss_func(params):
+        try:
+            if model_type == 'SES':
+                # params[0] = alpha
+                model = SimpleExpSmoothing(data).fit(smoothing_level=params[0], optimized=False)
+            elif model_type == 'Holt':
+                # params[0]=alpha, params[1]=beta
+                model = ExponentialSmoothing(data, trend='add', seasonal=None, damped_trend=False).fit(
+                    smoothing_level=params[0], smoothing_trend=params[1], optimized=False)
+            elif model_type == 'HW': 
+                # params[0]=alpha, params[1]=beta, params[2]=gamma
+                model = ExponentialSmoothing(data, trend='add', seasonal='add', seasonal_periods=seasonal_periods).fit(
+                    smoothing_level=params[0], smoothing_trend=params[1], smoothing_seasonal=params[2], optimized=False)
+            
+            # Trả về tổng bình phương sai số (SSE) - Càng nhỏ càng tốt
+            return np.sum((data - model.fittedvalues)**2)
+        except:
+            return 1e10
+
+    # Ràng buộc tham số trong khoảng 0.01 đến 0.99
+    bounds = [(0.01, 0.99)]
+    if model_type == 'Holt': bounds = [(0.01, 0.99), (0.01, 0.99)]
+    if model_type == 'HW': bounds = [(0.01, 0.99), (0.01, 0.99), (0.01, 0.99)]
+
+    x0 = [0.5] * len(bounds)
+    # Dùng thuật toán L-BFGS-B (Chuẩn Colab)
+    res = minimize(loss_func, x0, bounds=bounds, method='L-BFGS-B')
+    return res.x
 
 def clean_yfinance_data(df):
     if df.empty: return None
@@ -104,21 +140,16 @@ def clean_yfinance_data(df):
     col = next((c for c in ['adj close', 'close', 'price'] if c in df.columns), df.columns[0])
     return df[col]
 
-# Hàm tạo ngày tương lai thông minh (theo ngày/tháng/quý)
 def generate_future_dates(last_date, periods, freq_str):
     if freq_str == "DAILY":
         return pd.bdate_range(start=last_date, periods=periods + 1)[1:]
     elif freq_str == "MONTHLY":
-        # 'M' là cuối tháng
         return pd.date_range(start=last_date, periods=periods + 1, freq='M')[1:]
     elif freq_str == "QUARTERLY":
-        # 'Q' là cuối quý
         return pd.date_range(start=last_date, periods=periods + 1, freq='Q')[1:]
     return pd.bdate_range(start=last_date, periods=periods + 1)[1:]
 
 def get_forecast(data, model_type, test_size, window_size, future_steps, freq_str):
-    # Chia Train/Test
-    # Lưu ý: test_size ở đây hiểu là số "bước" (ngày/tháng/quý)
     if len(data) <= test_size:
         raise ValueError("Not enough data for backtesting.")
         
@@ -129,6 +160,12 @@ def get_forecast(data, model_type, test_size, window_size, future_steps, freq_st
     future_series = pd.Series(dtype='float64')
     info = ""
     warning_msg = None
+
+    # Xác định chu kỳ mùa vụ cho Holt-Winters
+    sp = 1
+    if freq_str == "DAILY": sp = 5
+    elif freq_str == "MONTHLY": sp = 12
+    elif freq_str == "QUARTERLY": sp = 4
 
     try:
         # === MÔ HÌNH 1: NAIVE ===
@@ -157,48 +194,65 @@ def get_forecast(data, model_type, test_size, window_size, future_steps, freq_st
                 future_series = pd.Series([last_ma] * len(future_dates), index=future_dates)
             info = f"MA({window_size})"
 
-        # === MÔ HÌNH 3: SES ===
+        # === MÔ HÌNH 3: SES (TỐI ƯU HÓA COLAB) ===
         elif model_type == "SES":
-            model = SimpleExpSmoothing(train).fit(optimized=True)
+            # 1. Tìm Alpha tối ưu
+            best_alpha = optimize_params(train, 'SES')[0]
+            # 2. Fit model với Alpha đó
+            model = SimpleExpSmoothing(train).fit(smoothing_level=best_alpha, optimized=False)
             preds[:] = model.forecast(len(test)).values
             
             if future_steps > 0:
-                model_full = SimpleExpSmoothing(data).fit(optimized=True)
+                # 3. Tối ưu lại trên toàn bộ data để dự báo tương lai (Logic Colab)
+                best_alpha_full = optimize_params(data, 'SES')[0]
+                model_full = SimpleExpSmoothing(data).fit(smoothing_level=best_alpha_full, optimized=False)
                 future_vals = model_full.forecast(future_steps).values
                 future_dates = generate_future_dates(data.index[-1], future_steps, freq_str)
                 future_series = pd.Series(future_vals, index=future_dates)
-            info = f"SES (alpha={model.params['smoothing_level']:.2f})"
+            info = f"SES (α={best_alpha:.2f})"
 
-        # === MÔ HÌNH 4: HOLT ===
+        # === MÔ HÌNH 4: HOLT (TỐI ƯU HÓA COLAB) ===
         elif model_type == "Holt":
-            model = ExponentialSmoothing(train, trend='add', seasonal=None).fit(optimized=True)
-            preds[:] = model.forecast(len(test)).values
-            
-            if future_steps > 0:
-                model_full = ExponentialSmoothing(data, trend='add', seasonal=None).fit(optimized=True)
-                future_vals = model_full.forecast(future_steps).values
-                future_dates = generate_future_dates(data.index[-1], future_steps, freq_str)
-                future_series = pd.Series(future_vals, index=future_dates)
-            info = "Holt's Linear"
-
-        # === MÔ HÌNH 5: HOLT-WINTERS ===
-        elif model_type == "Holt-Winters":
-            # Tự động điều chỉnh chu kỳ mùa vụ dựa trên Frequency
-            if freq_str == "DAILY": sp = 5
-            elif freq_str == "MONTHLY": sp = 12 # 1 năm
-            elif freq_str == "QUARTERLY": sp = 4 # 1 năm
-            
             try:
-                model = ExponentialSmoothing(train, trend='add', seasonal='add', seasonal_periods=sp).fit(optimized=True)
+                # 1. Tìm Alpha, Beta tối ưu
+                p = optimize_params(train, 'Holt')
+                model = ExponentialSmoothing(train, trend='add', seasonal=None, damped_trend=False).fit(
+                    smoothing_level=p[0], smoothing_trend=p[1], optimized=False)
                 preds[:] = model.forecast(len(test)).values
                 
                 if future_steps > 0:
-                    model_full = ExponentialSmoothing(data, trend='add', seasonal='add', seasonal_periods=sp).fit(optimized=True)
+                    p_full = optimize_params(data, 'Holt')
+                    model_full = ExponentialSmoothing(data, trend='add', seasonal=None, damped_trend=False).fit(
+                        smoothing_level=p_full[0], smoothing_trend=p_full[1], optimized=False)
                     future_vals = model_full.forecast(future_steps).values
                     future_dates = generate_future_dates(data.index[-1], future_steps, freq_str)
                     future_series = pd.Series(future_vals, index=future_dates)
-                info = f"Holt-Winters (sp={sp})"
+                info = f"Holt (α={p[0]:.2f}, β={p[1]:.2f})"
             except:
+                # Fallback nếu tối ưu tay lỗi
+                model = ExponentialSmoothing(train, trend='add', seasonal=None).fit(optimized=True)
+                preds[:] = model.forecast(len(test)).values
+                info = "Holt (Auto)"
+
+        # === MÔ HÌNH 5: HOLT-WINTERS (TỐI ƯU HÓA COLAB) ===
+        elif model_type == "Holt-Winters":
+            try:
+                # 1. Tìm Alpha, Beta, Gamma tối ưu
+                p = optimize_params(train, 'HW', seasonal_periods=sp)
+                model = ExponentialSmoothing(train, trend='add', seasonal='add', seasonal_periods=sp).fit(
+                    smoothing_level=p[0], smoothing_trend=p[1], smoothing_seasonal=p[2], optimized=False)
+                preds[:] = model.forecast(len(test)).values
+                
+                if future_steps > 0:
+                    p_full = optimize_params(data, 'HW', seasonal_periods=sp)
+                    model_full = ExponentialSmoothing(data, trend='add', seasonal='add', seasonal_periods=sp).fit(
+                        smoothing_level=p_full[0], smoothing_trend=p_full[1], smoothing_seasonal=p_full[2], optimized=False)
+                    future_vals = model_full.forecast(future_steps).values
+                    future_dates = generate_future_dates(data.index[-1], future_steps, freq_str)
+                    future_series = pd.Series(future_vals, index=future_dates)
+                info = f"HW (sp={sp}, α={p[0]:.2f})"
+            except:
+                # Fallback về Holt nếu HW lỗi dữ liệu
                 model = ExponentialSmoothing(train, trend='add', seasonal=None).fit(optimized=True)
                 preds[:] = model.forecast(len(test)).values
                 info = "Holt (Fallback)"
@@ -218,7 +272,7 @@ def get_forecast(data, model_type, test_size, window_size, future_steps, freq_st
 if 'vs_mode' not in st.session_state: st.session_state.vs_mode = False
 
 st.markdown("<h1>PIXEL TRADER</h1>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>STATISTICAL EDITION</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>STATISTICAL EDITION (OPTIMIZED)</div>", unsafe_allow_html=True)
 
 with st.container():
     c1, c2, c3 = st.columns([1, 3, 1]) 
@@ -226,20 +280,17 @@ with st.container():
         ticker = st.text_input("ENTER TICKER (e.g., AAPL)", value="AAPL").upper()
         col_inp1, col_inp2 = st.columns(2)
         with col_inp1: 
-            # [SỬA LẠI] Đã thêm Monthly và Quarterly
             freq_display = st.selectbox("TIMEFRAME", ("DAILY", "MONTHLY", "QUARTERLY"))
         with col_inp2: 
             model_display = st.selectbox("MODEL", ("Naive", "Moving Average", "SES", "Holt", "Holt-Winters"))
             
         with st.expander("⚙️ ADVANCED SETTINGS"):
-            # [SỬA LẠI] Chỉ hiện Window Size nếu chọn Moving Average
             if model_display == "Moving Average":
                 window_size = st.slider("WINDOW SIZE (MA)", 2, 50, 20)
             else:
-                window_size = 20 # Giá trị mặc định ẩn
+                window_size = 20 
                 
             test_size = st.slider("BACKTEST SIZE (Steps)", 5, 60, 20)
-            # Future Forecast hiểu theo đơn vị thời gian (Ngày/Tháng/Quý)
             future_steps = st.slider(f"FUTURE FORECAST ({freq_display})", 4, 60, 12)
         
         st.write("") 
@@ -265,17 +316,15 @@ if btn_run or st.session_state.get('run_success', False):
             if data is None or data.empty: 
                 st.error("❌ DATA NOT FOUND."); st.stop()
             
-            # [QUAN TRỌNG] Resample dữ liệu theo yêu cầu (Tháng/Quý)
+            # Resample dữ liệu theo yêu cầu
             if freq_display == "MONTHLY":
-                # Resample lấy giá cuối tháng
                 data = data.resample('M').last().dropna()
             elif freq_display == "QUARTERLY":
-                # Resample lấy giá cuối quý
                 data = data.resample('Q').last().dropna()
             else:
-                data = data.dropna() # Daily giữ nguyên
+                data = data.dropna()
 
-            # GỌI HÀM DỰ BÁO (Truyền thêm freq_display)
+            # GỌI HÀM DỰ BÁO (ĐÃ TỐI ƯU)
             train, test, preds, future_series, info, warning_msg = get_forecast(data, model_display, test_size, window_size, future_steps, freq_display)
 
             # Tính toán lỗi
@@ -321,7 +370,7 @@ if btn_run or st.session_state.get('run_success', False):
             st.write("")
             
             # ==================================================================
-            # BIỂU ĐỒ (Đã bao gồm Legend Fix + Future Forecast)
+            # BIỂU ĐỒ
             # ==================================================================
             fig = go.Figure()
 
@@ -348,7 +397,6 @@ if btn_run or st.session_state.get('run_success', False):
 
             # 4. Future
             if not future_series.empty:
-                # Label thay đổi theo timeframe
                 future_label = f'FUTURE (+{future_steps} {freq_display})'
                 fig.add_trace(go.Scatter(
                     x=future_series.index, y=future_series.values,
@@ -395,11 +443,9 @@ if btn_run or st.session_state.get('run_success', False):
                 
                 for i, t in enumerate(all_tickers):
                     try:
-                        # [FIX] Dùng cùng khung thời gian 2020-2025
                         d_t = yf.download(t, start="2020-11-23", end="2025-11-21", progress=False)
                         val = clean_yfinance_data(d_t)
                         if val is not None and not val.empty:
-                            # Resample cho đối thủ luôn
                             if freq_display == "MONTHLY":
                                 val = val.resample('M').last().dropna()
                             elif freq_display == "QUARTERLY":
