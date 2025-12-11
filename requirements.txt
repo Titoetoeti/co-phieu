@@ -4,7 +4,6 @@ pandas
 numpy
 plotly
 matplotlib
-scikit-learn
-tensorflow
-xgboost
-pmdarima
+scipy
+statsmodels
+openpyxl
