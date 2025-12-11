@@ -8,7 +8,7 @@ import time
 import base64
 import os
 
-# --- CÁC THƯ VIỆN TÍNH TOÁN AI ---
+# --- CÁC THƯ VIỆN AI/ML ---
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_percentage_error
 from pmdarima import auto_arima
@@ -17,29 +17,33 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, LSTM, GRU, Dropout
 
 # ==============================================================================
-# 1. CẤU HÌNH & HÀM HỖ TRỢ GIAO DIỆN
+# 1. CẤU HÌNH & HÀM HỖ TRỢ
 # ==============================================================================
 warnings.filterwarnings("ignore")
-st.set_page_config(page_title="PIXEL TRADER LOCAL", layout="wide", page_icon="📂")
+st.set_page_config(page_title="PIXEL TRADER FINAL", layout="wide", page_icon="📊")
 plt.style.use('dark_background') 
 
-# --- HÀM LOAD DATA TỪ FILE CSV ---
+# Tên file dữ liệu
+DATA_FILE = "Data_1.xlsx - Tong_Hop_log_return.csv"
+
+# --- HÀM LOAD DATA (ĐÃ FIX LỖI DATE & SORT) ---
 @st.cache_data
 def load_local_data(filepath):
-    """Đọc dữ liệu từ file CSV cục bộ"""
+    """Đọc dữ liệu từ file CSV, xử lý ngày tháng chuẩn xác"""
     try:
-        df = pd.read_csv(filepath)
-        # Chuyển cột Date thành kiểu datetime
-        df['Date'] = pd.to_datetime(df['Date'])
+        # Parse dates ngay khi đọc file để tránh lỗi định dạng
+        df = pd.read_csv(filepath, parse_dates=['Date'])
+        
+        # [QUAN TRỌNG] Sắp xếp lại theo thời gian từ cũ -> mới
+        df.sort_values(by='Date', inplace=True)
+        
+        # Đặt Date làm index
         df.set_index('Date', inplace=True)
         return df
     except Exception as e:
         return None
 
-# Tên file dữ liệu (Cố định theo yêu cầu)
-DATA_FILE = "Data_1.xlsx - Tong_Hop_log_return.csv"
-
-# --- HÀM INTRO VIDEO (GIỮ NGUYÊN) ---
+# --- HÀM INTRO VIDEO ---
 def show_intro_video(video_file, duration=8):
     if 'intro_done' not in st.session_state:
         st.session_state['intro_done'] = False
@@ -77,7 +81,7 @@ def show_intro_video(video_file, duration=8):
             <video id="intro-video" autoplay muted playsinline>
                 <source src="data:video/mp4;base64,{video_str}" type="video/mp4">
             </video>
-            <div id="skip-btn">LOADING LOCAL DATA...</div>
+            <div id="skip-btn">LOADING DATA & AI CORES...</div>
         </div>
         """
         placeholder = st.empty()
@@ -90,10 +94,10 @@ def show_intro_video(video_file, duration=8):
     except Exception:
         st.session_state['intro_done'] = True
 
-show_intro_video("intro1.mp4", duration=7)
+show_intro_video("intro1.mp4", duration=6)
 
 # ==============================================================================
-# 2. CSS GIAO DIỆN (PIXEL STYLE - GIỮ NGUYÊN)
+# 2. CSS GIAO DIỆN (PIXEL STYLE)
 # ==============================================================================
 st.markdown("""
     <style>
@@ -115,10 +119,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 3. LOGIC TÍNH TOÁN AI (GIỮ NGUYÊN CƠ CHẾ, CHỈNH INPUT)
+# 3. LOGIC TÍNH TOÁN AI (CORE ENGINE)
 # ==============================================================================
 
-# --- HÀM TẠO SEQUENCE CHO LSTM/GRU ---
 def create_sequences(data, seq_length):
     X, y = [], []
     for i in range(len(data) - seq_length):
@@ -126,7 +129,6 @@ def create_sequences(data, seq_length):
         y.append(data[i + seq_length])
     return np.array(X), np.array(y)
 
-# --- HÀM BUILD MODEL LSTM/GRU ---
 def build_dl_model(model_type, input_shape):
     model = Sequential()
     if model_type == 'LSTM':
@@ -144,9 +146,7 @@ def build_dl_model(model_type, input_shape):
     model.compile(optimizer='adam', loss='mean_squared_error')
     return model
 
-# --- HÀM DỰ BÁO CHÍNH ---
 def get_forecast(full_data, model_type, test_size, window_size, future_days=0):
-    # full_data ở đây là pd.Series của 1 mã cụ thể
     train_data = full_data.iloc[:-test_size]
     test_data = full_data.iloc[-test_size:]
     
@@ -156,9 +156,9 @@ def get_forecast(full_data, model_type, test_size, window_size, future_days=0):
     warning = None
 
     try:
-        # === LOGIC 1: ARIMA ===
+        # 1. ARIMA
         if model_type == "ARIMA":
-            model = auto_arima(train_data, start_p=1, start_q=1, max_p=3, max_q=3, m=1, seasonal=False, stepwise=True, suppress_warnings=True)
+            model = auto_arima(train_data, start_p=1, start_q=1, max_p=3, max_q=3, m=1, seasonal=False, stepwise=True, suppress_warnings=True, error_action='ignore')
             forecast_test = model.predict(n_periods=len(test_data))
             preds[:] = forecast_test.values
             
@@ -169,7 +169,7 @@ def get_forecast(full_data, model_type, test_size, window_size, future_days=0):
                 future_series = pd.Series(future_vals.values, index=future_dates)
             info = f"ARIMA{model.order}"
 
-        # === LOGIC 2: XGBOOST ===
+        # 2. XGBOOST
         elif model_type == "XGBoost":
             def create_lag_features(series, lag=3):
                 df_lag = pd.DataFrame(series)
@@ -199,12 +199,11 @@ def get_forecast(full_data, model_type, test_size, window_size, future_days=0):
                     fut_vals.append(pred)
                     curr_seq.pop(-1)
                     curr_seq.insert(0, pred)
-                
                 future_dates = pd.bdate_range(start=full_data.index[-1], periods=future_days + 1)[1:]
                 future_series = pd.Series(fut_vals, index=future_dates)
             info = f"XGB (Lags:{window_size})"
 
-        # === LOGIC 3 & 4: DEEP LEARNING (LSTM / GRU) ===
+        # 3. LSTM / GRU
         elif model_type in ["LSTM", "GRU"]:
             scaler = MinMaxScaler(feature_range=(0, 1))
             scaled_data = scaler.fit_transform(full_data.values.reshape(-1, 1))
@@ -239,7 +238,6 @@ def get_forecast(full_data, model_type, test_size, window_size, future_days=0):
                     fut_vals_scaled.append(pred_step[0, 0])
                     pred_step_reshaped = pred_step.reshape(1, 1, 1)
                     curr_seq = np.append(curr_seq[:, 1:, :], pred_step_reshaped, axis=1)
-                
                 fut_vals = scaler.inverse_transform(np.array(fut_vals_scaled).reshape(-1, 1))
                 future_dates = pd.bdate_range(start=full_data.index[-1], periods=future_days + 1)[1:]
                 future_series = pd.Series(fut_vals.flatten(), index=future_dates)
@@ -253,7 +251,7 @@ def get_forecast(full_data, model_type, test_size, window_size, future_days=0):
     return train_data, test_data, preds, future_series, info, warning
 
 # ==============================================================================
-# 4. GIAO DIỆN CHÍNH (ĐỔI SOURCE THÀNH FILE)
+# 4. GIAO DIỆN CHÍNH
 # ==============================================================================
 
 if 'vs_mode' not in st.session_state: st.session_state.vs_mode = False
@@ -261,20 +259,17 @@ if 'vs_mode' not in st.session_state: st.session_state.vs_mode = False
 st.markdown("<h1>PIXEL TRADER AI</h1>", unsafe_allow_html=True)
 st.markdown("<div class='sub-title'>LOCAL FILE EDITION</div>", unsafe_allow_html=True)
 
-# Load data ngay từ đầu để lấy danh sách cột
 df_full = load_local_data(DATA_FILE)
 
 if df_full is None:
     st.error(f"❌ KHÔNG TÌM THẤY FILE: {DATA_FILE}. Vui lòng upload file vào cùng thư mục.")
     st.stop()
 
-# Lấy danh sách mã từ cột (Bỏ qua cột Date vì đã làm index)
 available_tickers = list(df_full.columns)
 
 with st.container():
     c1, c2, c3 = st.columns([1, 3, 1]) 
     with c2:
-        # [THAY ĐỔI] Selectbox thay vì Text Input
         ticker = st.selectbox("SELECT STOCK (FROM FILE)", available_tickers)
         
         col_inp1, col_inp2 = st.columns(2)
@@ -304,25 +299,24 @@ if btn_run or st.session_state.get('run_success', False):
     
     try:
         with st.spinner(f"PROCESSING DATA: {ticker}..."):
-            # Lấy dữ liệu từ DataFrame đã load
-            data = df_full[ticker].dropna().astype(float)
+            # [FIX QUAN TRỌNG] Lấp đầy dữ liệu thay vì xóa
+            raw_series = df_full[ticker]
+            data = raw_series.fillna(method='ffill').fillna(method='bfill')
+            data = data.astype(float)
             
-            # [CHECK] Đảm bảo đủ dữ liệu
             min_req = window_size + test_size + 10
             if len(data) < min_req:
                 st.error(f"⚠️ DATA TOO SHORT. NEED > {min_req} ROWS."); st.stop()
 
-            # GỌI HÀM DỰ BÁO
             train, test, preds, future_series, info, warning_msg = get_forecast(data, model_display, test_size, window_size, future_days)
 
-            # Tính toán lỗi
             mask = ~np.isnan(preds) & ~np.isnan(test)
             rmse = np.sqrt(mean_squared_error(test[mask], preds[mask])) if mask.sum() > 0 else 0
             mape = mean_absolute_percentage_error(test[mask], preds[mask]) * 100 if mask.sum() > 0 else 0
 
             if warning_msg: st.warning(f"⚠️ MODEL WARNING: {warning_msg}")
 
-            # --- MARKET STATS ---
+            # --- STATS ---
             st.markdown(f"<div style='text-align:center; font-family:\"Press Start 2P\"; color:#00ff41; margin-bottom:10px'>TARGET: {ticker}</div>", unsafe_allow_html=True)
             
             current_price = test.iloc[-1]
@@ -346,6 +340,10 @@ if btn_run or st.session_state.get('run_success', False):
             stat1.markdown(f"<div style='{stat_box_style} border-color: #aaa;'><div style='{stat_label}'>CURRENT PRICE</div><div style='{stat_val}'>${current_price:,.2f}</div></div>", unsafe_allow_html=True)
             stat2.markdown(f"<div style='{stat_box_style} border-color: #ff00ff;'><div style='{stat_label} color:#ff00ff;'>AI TARGET (Future)</div><div style='{stat_val} color:#ff00ff;'>${final_predicted_price:,.2f}</div></div>", unsafe_allow_html=True)
             stat3.markdown(f"<div style='{stat_box_style} border-color: {trend_color};'><div style='{stat_label} color:{trend_color};'>AI FORECAST</div><div style='{stat_val} color:{trend_color};'>{trend_arrow} {abs(trend_pct):.2f}%</div></div>", unsafe_allow_html=True)
+            
+            # [FIX] Hiển thị ngày cuối cùng để đối chiếu
+            last_date_str = data.index[-1].strftime('%d/%m/%Y')
+            st.caption(f"📅 Data updated: {last_date_str} (Check with your Excel file)")
 
             # --- METRICS ---
             c_m1, c_m2, c_m3 = st.columns(3)
@@ -357,11 +355,8 @@ if btn_run or st.session_state.get('run_success', False):
 
             st.write("")
             
-            # ==================================================================
-            # BIỂU ĐỒ CHÍNH
-            # ==================================================================
+            # --- PLOT ---
             fig = go.Figure()
-            
             fig.add_trace(go.Scatter(x=data.index, y=data.values, mode='lines', name='HISTORY', line=dict(color='#555555', width=1.5)))
             fig.add_trace(go.Scatter(x=test.index, y=test.values, mode='lines', name='ACTUAL', line=dict(color='#00ff41', width=2)))
             fig.add_trace(go.Scatter(x=preds.index, y=preds.values, mode='lines', name='AI BACKTEST', line=dict(color='#ff00ff', width=2, dash='dot')))
@@ -384,15 +379,14 @@ if btn_run or st.session_state.get('run_success', False):
                 with st.expander("📋 VIEW FUTURE DATA POINTS"):
                     st.dataframe(future_series.to_frame(name="AI Prediction").T)
 
-            # --- VS MODE (CẬP NHẬT: LẤY CÁC MÃ CÒN LẠI TRONG FILE) ---
+            # --- VS MODE ---
             st.markdown("---")
             st.markdown("<h3 style='text-align:center; color:#ffcc00; font-family:\"Press Start 2P\"'>VS MODE (AI BATTLE)</h3>", unsafe_allow_html=True)
             
             c_vs1, c_vs2, c_vs3 = st.columns([1, 2, 1])
             with c_vs2:
-                # Tự động chọn các mã khác làm đối thủ
                 other_tickers = [t for t in available_tickers if t != ticker]
-                rivals = st.multiselect("SELECT RIVALS (FROM FILE)", other_tickers, default=other_tickers[:3])
+                rivals = st.multiselect("SELECT RIVALS (FROM FILE)", other_tickers, default=other_tickers[:3] if len(other_tickers)>0 else [])
                 st.write("")
                 btn_fight = st.button(">> START COMPARISON <<")
 
@@ -403,5 +397,50 @@ if btn_run or st.session_state.get('run_success', False):
                 
                 for i, t in enumerate(all_tickers):
                     try:
-                        val = df_full[t].dropna().astype(float)
-                        if len(val) > test_size + window_size
+                        # [FIX QUAN TRỌNG] Fix cả trong vòng lặp VS MODE
+                        raw_t = df_full[t]
+                        val = raw_t.fillna(method='ffill').fillna(method='bfill').astype(float)
+                        
+                        if len(val) > test_size + window_size:
+                            _, _, pred_t, _, _, _ = get_forecast(val, model_display, test_size, window_size, future_days=0)
+                            if not pred_t.isna().all(): results_map[t] = pred_t
+                    except Exception: pass
+                    progress_bar.progress((i + 1) / len(all_tickers))
+                progress_bar.empty()
+
+                if len(results_map) > 0:
+                    fig2 = go.Figure()
+                    colors = ['#00ff41', '#ff00ff', '#00ffff', '#ffcc00', '#ff3333', '#ffffff']
+                    
+                    for idx, (t_name, pred_series) in enumerate(results_map.items()):
+                        if len(pred_series) > 0:
+                            start_val = pred_series.iloc[0]
+                            if not np.isnan(start_val) and start_val != 0:
+                                pct_change = ((pred_series - start_val) / start_val) * 100
+                                width_line = 4 if t_name == ticker else 2
+                                dash_style = 'solid' if t_name == ticker else 'dot'
+                                line_color = colors[idx % len(colors)]
+                                
+                                fig2.add_trace(go.Scatter(x=pred_series.index, y=pct_change, mode='lines', name=f"{t_name}", line=dict(color=line_color, width=width_line, dash=dash_style)))
+
+                    fig2.update_layout(
+                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                        font=dict(family='Courier New, monospace', color='#ffffff'),
+                        xaxis=dict(showgrid=True, gridcolor='#333333', tickfont=dict(color='#ffffff')),
+                        yaxis=dict(showgrid=True, gridcolor='#333333', title="Growth %", tickfont=dict(color='#ffffff')),
+                        hovermode="x unified",
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color="#ffffff", size=12), bgcolor="rgba(0,0,0,0.5)")
+                    )
+                    st.plotly_chart(fig2, use_container_width=True)
+                else: st.warning("No valid data found for comparison.")
+
+    except Exception as e:
+        st.error(f"SYSTEM ERROR: {e}")
+
+else:
+    st.markdown("""
+        <div style='text-align: center; margin-top: 50px; font-family: "Press Start 2P"; color: #00ff41; animation: blinker 1s step-end infinite;'>
+            LOCAL DATA LOADED...<br>[ WAITING FOR INPUT ]
+        </div>
+        <style>@keyframes blinker { 50% { opacity: 0; } }</style>
+    """, unsafe_allow_html=True)
