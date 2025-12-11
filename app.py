@@ -77,7 +77,7 @@ def show_intro_video(video_file, duration=8):
         st.error(f"Lỗi Intro: {e}")
         st.session_state['intro_done'] = True
 
-# Gọi Intro (File intro1.mp4 như bản cũ)
+# Gọi Intro
 show_intro_video("intro1.mp4", duration=7)
 
 
@@ -135,7 +135,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 3. LOGIC TÍNH TOÁN (LOGIC V4.0)
+# 3. LOGIC TÍNH TOÁN (V4.0)
 # ==============================================================================
 
 def clean_yfinance_data(df):
@@ -218,7 +218,7 @@ def get_forecast(full_data, model_type, test_size, window_size, seasonal_p, freq
 if 'vs_mode' not in st.session_state: st.session_state.vs_mode = False
 
 st.markdown("<h1>PIXEL TRADER</h1>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>ULTIMATE EDITION [v4.1]</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>ULTIMATE EDITION [v4.2]</div>", unsafe_allow_html=True)
 
 with st.container():
     c1, c2, c3 = st.columns([1, 3, 1]) 
@@ -267,70 +267,34 @@ if btn_run or st.session_state.get('run_success', False):
             # GỌI HÀM DỰ BÁO
             train, test, preds, info, warning_msg = get_forecast(data, model_display, test_size, window_size, seasonal_p, freq_val)
 
-            # Tính Metrics
             mask = ~np.isnan(preds) & ~np.isnan(test)
             rmse = np.sqrt(mean_squared_error(test[mask], preds[mask])) if mask.sum() > 0 else 0
             mape = mean_absolute_percentage_error(test[mask], preds[mask]) * 100 if mask.sum() > 0 else 0
 
-            # CẢNH BÁO
             if warning_msg: st.warning(f"⚠️ {warning_msg}")
 
-            # ==================================================================
-            # [MỚI] PHẦN HIỂN THỊ THÔNG TIN TÀI CHÍNH (MARKET STATS)
-            # ==================================================================
+            # --- MARKET STATS ---
             st.markdown(f"<div style='text-align:center; font-family:\"Press Start 2P\"; color:#00ff41; margin-bottom:10px'>TARGET: {ticker}</div>", unsafe_allow_html=True)
             
-            # Tính toán các chỉ số
             current_price = test.iloc[-1]
             predicted_price = preds.iloc[-1]
-            
-            # Tính % biến động của đường dự báo (Trend) từ đầu kỳ test đến cuối kỳ test
             if not np.isnan(predicted_price) and not np.isnan(preds.iloc[0]):
                 trend_pct = ((predicted_price - preds.iloc[0]) / preds.iloc[0]) * 100
-            else:
-                trend_pct = 0.0
-
-            # Màu sắc trend: Xanh nếu tăng, Đỏ nếu giảm
+            else: trend_pct = 0.0
             trend_color = "#00ff41" if trend_pct >= 0 else "#ff3333"
             trend_arrow = "▲" if trend_pct >= 0 else "▼"
 
-            # Layout 3 cột cho thông tin tài chính
             stat1, stat2, stat3 = st.columns(3)
-            
-            # CSS Style chung cho ô
             stat_box_style = "border:2px solid #fff; padding:10px; text-align:center; background: rgba(255,255,255,0.05); margin-bottom: 20px;"
             stat_label = "font-family: 'Press Start 2P'; font-size: 12px; color: #aaa; margin-bottom: 8px;"
             stat_val = "font-family: 'VT323'; font-size: 36px; line-height: 1; color: #fff;"
 
-            # Ô 1: Giá hiện tại
-            stat1.markdown(f"""
-                <div style='{stat_box_style} border-color: #aaa;'>
-                    <div style='{stat_label}'>CURRENT PRICE</div>
-                    <div style='{stat_val}'>${current_price:,.2f}</div>
-                </div>
-            """, unsafe_allow_html=True)
+            stat1.markdown(f"<div style='{stat_box_style} border-color: #aaa;'><div style='{stat_label}'>CURRENT PRICE</div><div style='{stat_val}'>${current_price:,.2f}</div></div>", unsafe_allow_html=True)
+            stat2.markdown(f"<div style='{stat_box_style} border-color: #ff00ff;'><div style='{stat_label} color:#ff00ff;'>PREDICTED (END)</div><div style='{stat_val} color:#ff00ff;'>${predicted_price:,.2f}</div></div>", unsafe_allow_html=True)
+            stat3.markdown(f"<div style='{stat_box_style} border-color: {trend_color};'><div style='{stat_label} color:{trend_color};'>TREND FORECAST</div><div style='{stat_val} color:{trend_color};'>{trend_arrow} {abs(trend_pct):.2f}%</div></div>", unsafe_allow_html=True)
 
-            # Ô 2: Giá dự báo (Cuối kỳ)
-            stat2.markdown(f"""
-                <div style='{stat_box_style} border-color: #ff00ff;'>
-                    <div style='{stat_label} color:#ff00ff;'>PREDICTED (END)</div>
-                    <div style='{stat_val} color:#ff00ff;'>${predicted_price:,.2f}</div>
-                </div>
-            """, unsafe_allow_html=True)
-
-            # Ô 3: Xu hướng dự báo (%)
-            stat3.markdown(f"""
-                <div style='{stat_box_style} border-color: {trend_color};'>
-                    <div style='{stat_label} color:{trend_color};'>TREND FORECAST</div>
-                    <div style='{stat_val} color:{trend_color};'>{trend_arrow} {abs(trend_pct):.2f}%</div>
-                </div>
-            """, unsafe_allow_html=True)
-
-            # ==================================================================
-            # PHẦN HIỂN THỊ METRICS CŨ (RMSE/MAPE/PARAMS)
-            # ==================================================================
+            # --- METRICS ---
             c_m1, c_m2, c_m3 = st.columns(3)
-            
             box_style = "border:2px solid #00ff41; padding:10px; text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;"
             label_font = "font-family: 'Press Start 2P', cursive; font-size: 14px; margin-bottom: 5px; color: #00ff41;"
             value_font = "font-family: 'VT323', monospace; font-size: 40px; margin: 0; line-height: 1; color: #ffffff;"
@@ -339,15 +303,32 @@ if btn_run or st.session_state.get('run_success', False):
             c_m2.markdown(f"<div style='{box_style}'><div style='{label_font}'>MAPE</div><div style='{value_font}'>{mape:.2f}%</div></div>", unsafe_allow_html=True)
             c_m3.markdown(f"<div style='border:2px solid #00ffff; padding:10px; text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;'><div style='font-family: \"Press Start 2P\", cursive; font-size: 14px; margin-bottom: 5px; color: #00ffff;'>PARAMS</div><div style='font-family: \"VT323\", monospace; font-size: 35px; margin: 0; line-height: 1; color: #ffffff;'>{info}</div></div>", unsafe_allow_html=True)
 
+            # --- BIỂU ĐỒ (CÓ NHÃN GIÁ TRỊ) ---
             st.write("")
-            fig, ax = plt.subplots(figsize=(14, 6), facecolor='black')
+            fig, ax = plt.subplots(figsize=(14, 7), facecolor='black')
             ax.set_facecolor('black')
             fig.patch.set_alpha(0) 
             ax.patch.set_alpha(0)
             
-            ax.plot(train.index[-60:], train.iloc[-60:], color='#777', label='TRAIN')
+            # Vẽ các đường
+            ax.plot(train.index[-60:], train.iloc[-60:], color='#777', label='TRAIN', alpha=0.6)
             ax.plot(test.index, test, color='#00ff41', linewidth=2.5, label='ACTUAL')
             ax.plot(test.index, preds, color='#ff00ff', linestyle='--', linewidth=2, marker='o', markersize=5, label='PREDICT')
+            
+            # --- [UPDATE V4.2] THÊM NHÃN GIÁ TRỊ (ANNOTATION) ---
+            # 1. Nhãn cho đường DỰ BÁO (Hiện tất cả các điểm nhưng font nhỏ)
+            for date, value in preds.items():
+                if not np.isnan(value):
+                    # Offset nhẹ để không đè lên điểm tròn
+                    ax.text(date, value, f"{value:.1f}", color='#ff00ff', fontsize=9, 
+                            fontfamily='monospace', ha='center', va='bottom', fontweight='bold')
+
+            # 2. Nhãn cho đường THỰC TẾ (Chỉ hiện điểm cuối cùng)
+            last_date = test.index[-1]
+            last_val = test.iloc[-1]
+            ax.text(last_date, last_val, f" ACT: {last_val:.1f}", color='#00ff41', fontsize=11, 
+                    fontfamily='monospace', ha='left', va='center', fontweight='bold')
+
             ax.legend(facecolor='black', edgecolor='#333', labelcolor='#fff')
             ax.grid(color='#333', linestyle=':')
             for s in ax.spines.values(): s.set_edgecolor('#333')
@@ -376,12 +357,10 @@ if btn_run or st.session_state.get('run_success', False):
                         if val is not None and not val.empty:
                             val = val.astype(float)
                             if val.index.tz is not None: val.index = val.index.tz_localize(None)
-                            
                             if freq_val == "M": val = val.resample('M').last()
                             elif freq_val == "Q": val = val.resample('Q').last()
                             else: val = val.asfreq('B').fillna(method='ffill')
                             val = val.dropna()
-                            
                             if len(val) > test_size + window_size:
                                 _, _, pred_t, _, _ = get_forecast(val, model_display, test_size, window_size, seasonal_p, freq_val)
                                 if not pred_t.isna().all(): results_map[t] = pred_t
@@ -396,6 +375,7 @@ if btn_run or st.session_state.get('run_success', False):
                     ax2.set_facecolor('black')
                     ax2.patch.set_alpha(0)
                     colors = ['#00ff41', '#ff00ff', '#00ffff', '#ffcc00', '#ff3333']
+                    
                     for idx, (t_name, pred_series) in enumerate(results_map.items()):
                         if len(pred_series) > 0:
                             start_val = pred_series.iloc[0]
@@ -404,7 +384,13 @@ if btn_run or st.session_state.get('run_success', False):
                                 lw = 3 if t_name == ticker else 2
                                 ls = '-' if t_name == ticker else '--'
                                 color = colors[idx % len(colors)]
-                                ax2.plot(pred_series.index, pct_change, label=f"{t_name}", color=color, linewidth=lw, linestyle=ls)
+                                line, = ax2.plot(pred_series.index, pct_change, label=f"{t_name}", color=color, linewidth=lw, linestyle=ls)
+                                
+                                # --- [UPDATE] NHÃN CHO VS MODE (Chỉ hiện điểm cuối) ---
+                                last_pct = pct_change.iloc[-1]
+                                last_date = pct_change.index[-1]
+                                ax2.text(last_date, last_pct, f" {last_pct:.1f}%", color=color, fontsize=10, fontweight='bold', ha='left', va='center')
+
                     ax2.set_ylabel("GROWTH %")
                     ax2.legend(facecolor='black', edgecolor='#333', labelcolor='#fff')
                     ax2.grid(color='#222', linestyle=':')
