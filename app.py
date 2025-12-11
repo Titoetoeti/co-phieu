@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go # Thư viện biểu đồ tương tác
 import yfinance as yf
 from statsmodels.tsa.api import SimpleExpSmoothing, ExponentialSmoothing
 from sklearn.metrics import mean_squared_error, mean_absolute_percentage_error
@@ -16,7 +16,8 @@ import os
 # ==============================================================================
 warnings.filterwarnings("ignore")
 st.set_page_config(page_title="PIXEL TRADER PRO", layout="wide", page_icon="📈")
-plt.style.use('dark_background')
+# Vẫn giữ cấu hình này cho Matplotlib dù ta dùng Plotly (để an toàn)
+plt.style.use('dark_background') 
 
 # --- HÀM INTRO VIDEO ---
 def show_intro_video(video_file, duration=8):
@@ -218,7 +219,7 @@ def get_forecast(full_data, model_type, test_size, window_size, seasonal_p, freq
 if 'vs_mode' not in st.session_state: st.session_state.vs_mode = False
 
 st.markdown("<h1>PIXEL TRADER</h1>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>ULTIMATE EDITION [v4.2]</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>ULTIMATE EDITION [v4.3 - INTERACTIVE]</div>", unsafe_allow_html=True)
 
 with st.container():
     c1, c2, c3 = st.columns([1, 3, 1]) 
@@ -303,36 +304,66 @@ if btn_run or st.session_state.get('run_success', False):
             c_m2.markdown(f"<div style='{box_style}'><div style='{label_font}'>MAPE</div><div style='{value_font}'>{mape:.2f}%</div></div>", unsafe_allow_html=True)
             c_m3.markdown(f"<div style='border:2px solid #00ffff; padding:10px; text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;'><div style='font-family: \"Press Start 2P\", cursive; font-size: 14px; margin-bottom: 5px; color: #00ffff;'>PARAMS</div><div style='font-family: \"VT323\", monospace; font-size: 35px; margin: 0; line-height: 1; color: #ffffff;'>{info}</div></div>", unsafe_allow_html=True)
 
-            # --- BIỂU ĐỒ (CÓ NHÃN GIÁ TRỊ) ---
             st.write("")
-            fig, ax = plt.subplots(figsize=(14, 7), facecolor='black')
-            ax.set_facecolor('black')
-            fig.patch.set_alpha(0) 
-            ax.patch.set_alpha(0)
             
-            # Vẽ các đường
-            ax.plot(train.index[-60:], train.iloc[-60:], color='#777', label='TRAIN', alpha=0.6)
-            ax.plot(test.index, test, color='#00ff41', linewidth=2.5, label='ACTUAL')
-            ax.plot(test.index, preds, color='#ff00ff', linestyle='--', linewidth=2, marker='o', markersize=5, label='PREDICT')
+            # ==================================================================
+            # [THAY ĐỔI] SỬ DỤNG PLOTLY ĐỂ VẼ BIỂU ĐỒ TƯƠNG TÁC
+            # ==================================================================
             
-            # --- [UPDATE V4.2] THÊM NHÃN GIÁ TRỊ (ANNOTATION) ---
-            # 1. Nhãn cho đường DỰ BÁO (Hiện tất cả các điểm nhưng font nhỏ)
-            for date, value in preds.items():
-                if not np.isnan(value):
-                    # Offset nhẹ để không đè lên điểm tròn
-                    ax.text(date, value, f"{value:.1f}", color='#ff00ff', fontsize=9, 
-                            fontfamily='monospace', ha='center', va='bottom', fontweight='bold')
+            fig = go.Figure()
 
-            # 2. Nhãn cho đường THỰC TẾ (Chỉ hiện điểm cuối cùng)
-            last_date = test.index[-1]
-            last_val = test.iloc[-1]
-            ax.text(last_date, last_val, f" ACT: {last_val:.1f}", color='#00ff41', fontsize=11, 
-                    fontfamily='monospace', ha='left', va='center', fontweight='bold')
+            # 1. Vẽ dữ liệu Train (Màu xám)
+            fig.add_trace(go.Scatter(
+                x=train.index[-60:], # Lấy 60 điểm cuối để đỡ rối
+                y=train.iloc[-60:],
+                mode='lines',
+                name='TRAIN',
+                line=dict(color='#555555', width=1.5)
+            ))
 
-            ax.legend(facecolor='black', edgecolor='#333', labelcolor='#fff')
-            ax.grid(color='#333', linestyle=':')
-            for s in ax.spines.values(): s.set_edgecolor('#333')
-            st.pyplot(fig)
+            # 2. Vẽ dữ liệu Thực tế (Màu Xanh Neon)
+            fig.add_trace(go.Scatter(
+                x=test.index,
+                y=test,
+                mode='lines+markers',
+                name='ACTUAL',
+                line=dict(color='#00ff41', width=3),
+                marker=dict(size=4)
+            ))
+
+            # 3. Vẽ dữ liệu Dự báo (Màu Tím Neon)
+            fig.add_trace(go.Scatter(
+                x=preds.index,
+                y=preds,
+                mode='lines+markers',
+                name='PREDICT',
+                line=dict(color='#ff00ff', width=3, dash='dash'),
+                marker=dict(size=6, symbol='circle')
+            ))
+
+            # Cấu hình giao diện biểu đồ (Dark Mode)
+            fig.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)', # Nền trong suốt
+                plot_bgcolor='rgba(0,0,0,0)',  # Nền trong suốt
+                font=dict(family='Courier New, monospace', color='#ffffff'), # Font chữ kiểu code
+                xaxis=dict(
+                    showgrid=True, gridcolor='#333333', 
+                    tickfont=dict(color='#00ff41')
+                ),
+                yaxis=dict(
+                    showgrid=True, gridcolor='#333333', 
+                    tickfont=dict(color='#ffffff')
+                ),
+                hovermode="x unified", # Rê chuột hiện tất cả thông số cùng lúc
+                legend=dict(
+                    orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
+                ),
+                margin=dict(l=0, r=0, t=30, b=0)
+            )
+
+            # Hiển thị biểu đồ Plotly
+            st.plotly_chart(fig, use_container_width=True)
+
 
             # --- VS MODE ---
             st.markdown("---")
@@ -370,10 +401,10 @@ if btn_run or st.session_state.get('run_success', False):
 
                 if len(results_map) > 0:
                     st.markdown("<h4 style='text-align:center; font-family:VT323; margin-top:20px'>PREDICTED GROWTH (%) COMPARISON</h4>", unsafe_allow_html=True)
-                    fig2, ax2 = plt.subplots(figsize=(14, 7), facecolor='black')
-                    fig2.patch.set_alpha(0)
-                    ax2.set_facecolor('black')
-                    ax2.patch.set_alpha(0)
+                    
+                    # [THAY ĐỔI] BIỂU ĐỒ VS MODE TƯƠNG TÁC
+                    fig2 = go.Figure()
+                    
                     colors = ['#00ff41', '#ff00ff', '#00ffff', '#ffcc00', '#ff3333']
                     
                     for idx, (t_name, pred_series) in enumerate(results_map.items()):
@@ -381,22 +412,29 @@ if btn_run or st.session_state.get('run_success', False):
                             start_val = pred_series.iloc[0]
                             if not np.isnan(start_val) and start_val != 0:
                                 pct_change = ((pred_series - start_val) / start_val) * 100
-                                lw = 3 if t_name == ticker else 2
-                                ls = '-' if t_name == ticker else '--'
-                                color = colors[idx % len(colors)]
-                                line, = ax2.plot(pred_series.index, pct_change, label=f"{t_name}", color=color, linewidth=lw, linestyle=ls)
                                 
-                                # --- [UPDATE] NHÃN CHO VS MODE (Chỉ hiện điểm cuối) ---
-                                last_pct = pct_change.iloc[-1]
-                                last_date = pct_change.index[-1]
-                                ax2.text(last_date, last_pct, f" {last_pct:.1f}%", color=color, fontsize=10, fontweight='bold', ha='left', va='center')
+                                width_line = 4 if t_name == ticker else 2
+                                dash_style = 'solid' if t_name == ticker else 'dot'
+                                line_color = colors[idx % len(colors)]
+                                
+                                fig2.add_trace(go.Scatter(
+                                    x=pred_series.index,
+                                    y=pct_change,
+                                    mode='lines',
+                                    name=f"{t_name}",
+                                    line=dict(color=line_color, width=width_line, dash=dash_style)
+                                ))
 
-                    ax2.set_ylabel("GROWTH %")
-                    ax2.legend(facecolor='black', edgecolor='#333', labelcolor='#fff')
-                    ax2.grid(color='#222', linestyle=':')
-                    ax2.axhline(0, color='#555', linewidth=1)
-                    for s in ax2.spines.values(): s.set_edgecolor('#333')
-                    st.pyplot(fig2)
+                    fig2.update_layout(
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        font=dict(family='Courier New, monospace', color='#ffffff'),
+                        xaxis=dict(showgrid=True, gridcolor='#333333'),
+                        yaxis=dict(showgrid=True, gridcolor='#333333', title="Growth %"),
+                        hovermode="x unified"
+                    )
+                    
+                    st.plotly_chart(fig2, use_container_width=True)
                 else: st.warning("No valid data found for comparison.")
 
     except Exception as e:
